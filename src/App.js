@@ -14,7 +14,7 @@ export default function App() {
   const [jenisFilter, setJenisFilter] = useState('ALL');
 
   // TEMPEL LINK CSV "SELURUH DOKUMEN" YANG BARU KAMU SALIN DI SINI:
-  const publishedCsvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYKXc-rzon8VqYa1SEYc_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYtvAYYoTIMQu03C/pub?output=csv";
+  const publishedCsvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?output=csv";
 
   const parseCSVLine = (line) => {
     const result = [];
