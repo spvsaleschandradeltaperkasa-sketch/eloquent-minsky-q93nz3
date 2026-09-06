@@ -24,12 +24,7 @@ const MONTHS_ORDER = [
   "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"
 ];
 
-const TARGET_KPI_2026 = {
-  ANS: { revenue: 900000000, cash: 900000000 },
-  CDP: { revenue: 4000000000, cash: 4000000000 },
-  FAN: { revenue: 900000000, cash: 900000000 },
-  BKP: { revenue: 0, cash: 0 }
-};
+const SALES_LIST = ["ANS", "CDP", "FAN", "UCI", "BKP", "CDF", "SPL"];
 
 const NAV_ITEMS = [
   { id: "dashboard", icon: LayoutDashboard, label: "Overview / Dashboard SPV" },
@@ -85,7 +80,7 @@ function parseCSVLine(line) {
   return result;
 }
 
-function parseCSV(text, year) {
+function parseCSV(text, defaultYear) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return [];
 
@@ -97,15 +92,15 @@ function parseCSV(text, year) {
     return headers.findIndex((h) => possibleNames.some((p) => h.includes(p)));
   };
 
+  const idxTahun = getIdx(["tahun"]);
   const idxInv = getIdx(["nomor invoice", "no invoice", "no. invoice", "invoice"]);
   const idxCust = getIdx(["nama customer", "customer", "pelanggan"]);
-  const idxSales = getIdx(["sales / via", "via / sales", "sales", "via"]);
-  const idxBulan = getIdx(["bulan", "month"]);
-  const idxRev = getIdx(["total tagihan", "nilai invoice", "revenue", "tagihan"]);
-  const idxCash = getIdx(["total dana masuk", "dana masuk", "cash in"]);
+  const idxSales = getIdx(["via", "sales"]);
+  const idxBulan = getIdx(["month", "bulan"]);
+  const idxRev = getIdx(["nilai invoice", "total tagihan", "revenue"]);
+  const idxCash = getIdx(["dana masuk", "cash in", "total dana masuk"]);
   const idxSisa = getIdx(["sisa tagihan", "sisa"]);
   const idxStatus = getIdx(["status invoice", "status ar", "status"]);
-  const idxJob = getIdx(["job id", "job"]);
 
   const data = [];
   for (let i = 1; i < lines.length; i++) {
@@ -116,24 +111,20 @@ function parseCSV(text, year) {
     const customer = idxCust !== -1 ? row[idxCust] || "" : "";
     let salesRaw = idxSales !== -1 ? row[idxSales] || "" : "";
     const bulanRaw = idxBulan !== -1 ? row[idxBulan] || "" : "";
+    const tahunRaw = idxTahun !== -1 ? row[idxTahun] || "" : defaultYear;
     const revVal = idxRev !== -1 ? cleanNumber(row[idxRev]) : 0;
     const cashVal = idxCash !== -1 ? cleanNumber(row[idxCash]) : 0;
     const sisaVal = idxSisa !== -1 ? cleanNumber(row[idxSisa]) : revVal - cashVal;
     const statusVal = idxStatus !== -1 ? row[idxStatus] || "" : "";
-    const jobVal = idxJob !== -1 ? row[idxJob] || "" : "";
 
     if (!noInv && !customer && revVal === 0 && cashVal === 0) continue;
 
     let salesNormalized = salesRaw.toUpperCase().trim();
-    if (salesNormalized.includes("ANS")) salesNormalized = "ANS";
-    else if (salesNormalized.includes("CDP")) salesNormalized = "CDP";
-    else if (salesNormalized.includes("FAN")) salesNormalized = "FAN";
-    else if (salesNormalized.includes("BKP")) salesNormalized = "BKP";
-
     let bulanNormalized = bulanRaw.toUpperCase().trim();
+    let tahunNormalized = tahunRaw ? String(tahunRaw).replace(".0", "").trim() : String(defaultYear);
 
     data.push({
-      tahun: String(year),
+      tahun: tahunNormalized,
       noInv,
       customer,
       salesRaw,
@@ -142,8 +133,7 @@ function parseCSV(text, year) {
       revenue: revVal,
       cashIn: cashVal,
       sisaTagihan: sisaVal,
-      status: statusVal,
-      jobId: jobVal
+      status: statusVal
     });
   }
   return data;
@@ -158,7 +148,7 @@ const formatIDR = (val) => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("kpi");
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -199,18 +189,18 @@ export default function App() {
       if (filterTahun !== "Semua tahun" && item.tahun !== filterTahun) return false;
       if (
         filterBulan !== "Semua bulan" &&
-        item.bulan.toLowerCase() !== filterBulan.toLowerCase()
+        !item.bulan.toLowerCase().includes(filterBulan.toLowerCase())
       )
         return false;
       if (
         filterSales !== "Semua sales / VIA" &&
-        item.sales.toLowerCase() !== filterSales.toLowerCase()
+        !item.sales.toLowerCase().includes(filterSales.toLowerCase())
       )
         return false;
 
       const st = item.status ? item.status.toLowerCase().trim() : "";
       const isLebih = st.includes("lebih") || item.sisaTagihan < 0;
-      const isLunas = st.includes("lunas") || (item.sisaTagihan === 0 && item.revenue > 0);
+      const isLunas = st.includes("lunas") || (item.sisaTagihan <= 0 && item.revenue > 0);
 
       if (filterStatus === "Lunas" && !isLunas) return false;
       if (filterStatus === "Belum Lunas" && isLunas) return false;
@@ -228,20 +218,16 @@ export default function App() {
   const totalSisa = useMemo(() => filteredInvoices.reduce((acc, curr) => acc + curr.sisaTagihan, 0), [filteredInvoices]);
 
   const salesPerformance = useMemo(() => {
-    const salesList = ["BKP", "CDP", "ANS", "FAN"];
-    return salesList.map((code) => {
-      const items = filteredInvoices.filter((x) => x.sales === code);
+    return SALES_LIST.map((code) => {
+      const items = filteredInvoices.filter((x) => x.sales.includes(code));
       const rev = items.reduce((a, b) => a + b.revenue, 0);
       const cash = items.reduce((a, b) => a + b.cashIn, 0);
-      const target = TARGET_KPI_2026[code] || { revenue: 0, cash: 0 };
 
       return {
         code,
         count: items.length,
         revenue: rev,
-        cashIn: cash,
-        targetRev: target.revenue,
-        targetCash: target.cash
+        cashIn: cash
       };
     });
   }, [filteredInvoices]);
@@ -401,10 +387,11 @@ export default function App() {
                 className="bg-[#0b0e14] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
               >
                 <option value="Semua sales / VIA">Semua sales / VIA</option>
-                <option value="ANS">ANS</option>
-                <option value="CDP">CDP</option>
-                <option value="FAN">FAN</option>
-                <option value="BKP">BKP</option>
+                {SALES_LIST.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
 
               <select
@@ -453,7 +440,7 @@ export default function App() {
                   PERFORMA SALES PERSON INDIVIDUAL
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   {salesPerformance.map((sp) => (
                     <div key={sp.code} className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
                       <div className="flex items-center gap-3">
@@ -483,7 +470,7 @@ export default function App() {
             </>
           )}
 
-          {/* MASTER INVOICE & MONITORING OUTSTANDING */}
+          {/* MASTER INVOICE & MONITORING */}
           {(activeTab === "invoice" || activeTab === "outstanding2026" || activeTab === "cashinall") && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 uppercase">
@@ -500,7 +487,6 @@ export default function App() {
                       <th className="p-3">Total Tagihan</th>
                       <th className="p-3">Cash In</th>
                       <th className="p-3">Sisa Tagihan</th>
-                      <th className="p-3">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
@@ -515,61 +501,11 @@ export default function App() {
                           <td className="p-3 font-semibold">{formatIDR(inv.revenue)}</td>
                           <td className="p-3 text-emerald-400">{formatIDR(inv.cashIn)}</td>
                           <td className="p-3 text-amber-400">{formatIDR(inv.sisaTagihan)}</td>
-                          <td className="p-3">
-                            <span
-                              className={`px-2 py-1 rounded text-[10px] font-bold ${
-                                inv.sisaTagihan <= 0
-                                  ? "bg-emerald-500/20 text-emerald-400"
-                                  : "bg-amber-500/20 text-amber-400"
-                              }`}
-                            >
-                              {inv.sisaTagihan <= 0 ? "LUNAS" : "BELUM LUNAS"}
-                            </span>
-                          </td>
                         </tr>
                       ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
-
-          {/* KONTRIBUSI REVENUE & PERBANDINGAN */}
-          {(activeTab === "kontribusi2026" || activeTab === "perbandingan") && (
-            <div className="bg-[#121722] border border-slate-800 rounded-2xl p-6 space-y-6">
-              <h3 className="text-sm font-bold text-white uppercase">
-                {activeTab === "kontribusi2026" ? "KONTRIBUSI REVENUE PER SALES 2026" : "PERBANDINGAN REVENUE BULANAN"}
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {salesPerformance.map((sp) => (
-                  <div key={sp.code} className="bg-[#0b0e14] p-4 rounded-xl border border-slate-800">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-bold text-white text-sm">{sp.code}</span>
-                      <span className="text-xs text-blue-400 font-bold">
-                        {totalRevenue ? ((sp.revenue / totalRevenue) * 100).toFixed(1) : 0}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
-                      <div
-                        className="bg-red-600 h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${totalRevenue ? Math.min((sp.revenue / totalRevenue) * 100, 100) : 0}%`
-                        }}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-2">{formatIDR(sp.revenue)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* JOB ID & TO DO LIST */}
-          {(activeTab === "jobid" || activeTab === "todolist") && (
-            <div className="bg-[#121722] border border-slate-800 rounded-2xl p-6 text-center text-slate-400">
-              <p className="text-sm">
-                📌 Menu <strong className="text-white">{NAV_ITEMS.find((n) => n.id === activeTab)?.label}</strong> siap digunakan dan tersambung otomatis dengan pembaruan Google Sheets.
-              </p>
             </div>
           )}
         </div>
