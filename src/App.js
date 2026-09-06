@@ -14,10 +14,9 @@ import {
   CheckSquare
 } from "lucide-react";
 
-const URL_2025 =
+// Link Publish CSV dari sheet utama: REKAP INVOICE 23242526
+const REKAP_INVOICE_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIRP841n/pub?gid=0&single=true&output=csv";
-const URL_2026 =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIRP841n/pub?gid=1510250917&single=true&output=csv";
 
 const MONTHS_ORDER = [
   "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
@@ -30,8 +29,8 @@ const NAV_ITEMS = [
   { id: "dashboard", icon: LayoutDashboard, label: "Overview / Dashboard SPV" },
   { id: "kpi", icon: Users, label: "Sales Performance" },
   { id: "invoice", icon: FileText, label: "Master Invoice" },
-  { id: "outstanding2026", icon: AlertTriangle, label: "Monitoring Outstanding 2026" },
-  { id: "kontribusi2026", icon: PieChart, label: "Kontribusi Revenue 2026" },
+  { id: "outstanding", icon: AlertTriangle, label: "Monitoring Outstanding" },
+  { id: "kontribusi", icon: PieChart, label: "Kontribusi Revenue" },
   { id: "perbandingan", icon: BarChart2, label: "Perbandingan Revenue" },
   { id: "jobid", icon: Truck, label: "Job ID Status" },
   { id: "cashinall", icon: CreditCard, label: "Cash In All (2023-2026)" },
@@ -80,7 +79,7 @@ function parseCSVLine(line) {
   return result;
 }
 
-function parseCSV(text, defaultYear) {
+function parseMasterRekap(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return [];
 
@@ -88,19 +87,20 @@ function parseCSV(text, defaultYear) {
     h.replace(/^"|"$/g, "").trim().toLowerCase()
   );
 
-  const getIdx = (exactOrSub) => {
-    return headers.findIndex((h) => exactOrSub.some((p) => h === p || h.includes(p)));
+  const getIdx = (keywords) => {
+    return headers.findIndex((h) => keywords.some((k) => h === k || h.includes(k)));
   };
 
   const idxTahun = getIdx(["tahun"]);
+  const idxSales = getIdx(["via"]);
   const idxInv = getIdx(["no invoice", "nomor invoice", "no. invoice"]);
   const idxCust = getIdx(["nama customer", "customer"]);
-  const idxSales = getIdx(["via", "sales"]);
-  const idxBulan = getIdx(["month", "bulan"]);
-  const idxRev = getIdx(["nilai invoice", "revenue", "total tagihan"]);
-  const idxCash = getIdx(["dana masuk", "cash in"]);
-  const idxSisa = getIdx(["sisa tagihan", "sisa"]);
-  const idxStatus = getIdx(["status invoice", "status ar", "status"]);
+  const idxRev = getIdx(["nilai invoice"]);
+  const idxDanaMasuk = getIdx(["dana masuk"]);
+  const idxSisa = getIdx(["sisa tagihan"]);
+  const idxStatus = getIdx(["status invoice"]);
+  const idxMonth = getIdx(["month", "bulan"]);
+  const idxCashIn = getIdx(["cash in"]);
 
   const data = [];
   for (let i = 1; i < lines.length; i++) {
@@ -109,29 +109,31 @@ function parseCSV(text, defaultYear) {
 
     const noInv = idxInv !== -1 ? row[idxInv] || "" : "";
     const customer = idxCust !== -1 ? row[idxCust] || "" : "";
-    let salesRaw = idxSales !== -1 ? row[idxSales] || "" : "";
-    const bulanRaw = idxBulan !== -1 ? row[idxBulan] || "" : "";
-    const tahunRaw = idxTahun !== -1 ? row[idxTahun] || "" : defaultYear;
+    const salesRaw = idxSales !== -1 ? row[idxSales] || "" : "";
+    const monthRaw = idxMonth !== -1 ? row[idxMonth] || "" : "";
+    const tahunRaw = idxTahun !== -1 ? row[idxTahun] || "" : "2026";
+
     const revVal = idxRev !== -1 ? cleanNumber(row[idxRev]) : 0;
-    const cashVal = idxCash !== -1 ? cleanNumber(row[idxCash]) : 0;
-    const sisaVal = idxSisa !== -1 ? cleanNumber(row[idxSisa]) : revVal - cashVal;
+    const danaMasukVal = idxDanaMasuk !== -1 ? cleanNumber(row[idxDanaMasuk]) : 0;
+    const cashInVal = idxCashIn !== -1 ? cleanNumber(row[idxCashIn]) : danaMasukVal;
+    const sisaVal = idxSisa !== -1 ? cleanNumber(row[idxSisa]) : revVal - danaMasukVal;
     const statusVal = idxStatus !== -1 ? row[idxStatus] || "" : "";
 
-    if (!noInv && !customer && revVal === 0 && cashVal === 0) continue;
+    if (!noInv && !customer && revVal === 0 && danaMasukVal === 0) continue;
 
-    let salesNormalized = salesRaw.toUpperCase().trim();
-    let bulanNormalized = bulanRaw.toUpperCase().trim();
-    let tahunNormalized = tahunRaw ? String(tahunRaw).replace(".0", "").trim() : String(defaultYear);
+    let tahunNorm = String(tahunRaw).replace(".0", "").trim();
+    let monthNorm = monthRaw.toUpperCase().trim();
+    let salesNorm = salesRaw.toUpperCase().trim();
 
     data.push({
-      tahun: tahunNormalized,
+      tahun: tahunNorm,
+      bulan: monthNorm,
+      sales: salesNorm,
       noInv,
       customer,
-      salesRaw,
-      sales: salesNormalized,
-      bulan: bulanNormalized,
       revenue: revVal,
-      cashIn: cashVal,
+      danaMasuk: danaMasukVal,
+      cashIn: cashInVal,
       sisaTagihan: sisaVal,
       status: statusVal
     });
@@ -164,15 +166,9 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const [res2025, res2026] = await Promise.all([
-        fetch(URL_2025).then((r) => r.text()),
-        fetch(URL_2026).then((r) => r.text())
-      ]);
-
-      const data2025 = parseCSV(res2025, "2025");
-      const data2026 = parseCSV(res2026, "2026");
-
-      setInvoices([...data2025, ...data2026]);
+      const res = await fetch(REKAP_INVOICE_URL).then((r) => r.text());
+      const parsedData = parseMasterRekap(res);
+      setInvoices(parsedData);
     } catch (err) {
       setError("Gagal menarik data dari Google Sheets.");
     } finally {
@@ -184,6 +180,7 @@ export default function App() {
     fetchData();
   }, []);
 
+  // Filter Utama Berdasarkan Sheet Rekap Invoice 23242526
   const filteredInvoices = useMemo(() => {
     return invoices.filter((item) => {
       if (filterTahun !== "Semua tahun" && item.tahun !== filterTahun) return false;
@@ -198,13 +195,11 @@ export default function App() {
       )
         return false;
 
-      const st = item.status ? item.status.toLowerCase().trim() : "";
-      const isLebih = st.includes("lebih") || item.sisaTagihan < 0;
-      const isLunas = st.includes("lunas") || (item.sisaTagihan <= 0 && item.revenue > 0);
-
-      if (filterStatus === "Lunas" && !isLunas) return false;
-      if (filterStatus === "Belum Lunas" && isLunas) return false;
-      if (filterStatus === "Bayar Lebih" && !isLebih) return false;
+      const st = item.status.toLowerCase();
+      if (filterStatus === "Lunas" && !st.includes("lunas")) return false;
+      if (filterStatus === "Kurang Bayar" && !st.includes("kurang")) return false;
+      if (filterStatus === "Lebih Bayar" && !st.includes("lebih")) return false;
+      if (filterStatus === "Belum Ada Pembayaran" && !st.includes("belum")) return false;
 
       if (searchInv && !item.noInv.toLowerCase().includes(searchInv.toLowerCase())) return false;
       if (searchCust && !item.customer.toLowerCase().includes(searchCust.toLowerCase())) return false;
@@ -213,10 +208,28 @@ export default function App() {
     });
   }, [invoices, filterTahun, filterBulan, filterSales, filterStatus, searchInv, searchCust]);
 
-  const totalRevenue = useMemo(() => filteredInvoices.reduce((acc, curr) => acc + curr.revenue, 0), [filteredInvoices]);
-  const totalCashIn = useMemo(() => filteredInvoices.reduce((acc, curr) => acc + curr.cashIn, 0), [filteredInvoices]);
-  const totalSisa = useMemo(() => filteredInvoices.reduce((acc, curr) => acc + curr.sisaTagihan, 0), [filteredInvoices]);
+  // Aggregate Ringkasan
+  const totalRevenue = useMemo(() => filteredInvoices.reduce((a, b) => a + b.revenue, 0), [filteredInvoices]);
+  const totalDanaMasuk = useMemo(() => filteredInvoices.reduce((a, b) => a + b.danaMasuk, 0), [filteredInvoices]);
+  const totalSisa = useMemo(() => filteredInvoices.reduce((a, b) => a + b.sisaTagihan, 0), [filteredInvoices]);
 
+  // Performa Per Sales Person
+  const salesPerformance = useMemo(() => {
+    return SALES_LIST.map((code) => {
+      const items = filteredInvoices.filter((x) => x.sales.includes(code));
+      const rev = items.reduce((a, b) => a + b.revenue, 0);
+      const cash = items.reduce((a, b) => a + b.danaMasuk, 0);
+
+      return {
+        code,
+        count: items.length,
+        revenue: rev,
+        cashIn: cash
+      };
+    });
+  }, [filteredInvoices]);
+
+  // Perbandingan 2025 vs 2026 per Bulan dari Rekap Data
   const monthlyComparison = useMemo(() => {
     return MONTHS_ORDER.map((m) => {
       const data2025 = invoices.filter(
@@ -240,21 +253,6 @@ export default function App() {
       };
     });
   }, [invoices, filterSales]);
-
-  const salesPerformance = useMemo(() => {
-    return SALES_LIST.map((code) => {
-      const items = filteredInvoices.filter((x) => x.sales.includes(code));
-      const rev = items.reduce((a, b) => a + b.revenue, 0);
-      const cash = items.reduce((a, b) => a + b.cashIn, 0);
-
-      return {
-        code,
-        count: items.length,
-        revenue: rev,
-        cashIn: cash
-      };
-    });
-  }, [filteredInvoices]);
 
   const handleResetFilter = () => {
     setFilterTahun("2026");
@@ -311,14 +309,14 @@ export default function App() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-y-auto">
         <header className="p-6 border-b border-slate-800 flex justify-between items-center bg-[#121722]/50">
           <div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-red-500"></span>
               <span className="text-[10px] font-bold tracking-wider uppercase text-red-400">
-                LIVE SPREADSHEETS SYNC (2025 & 2026)
+                PIVOT: REKAP INVOICE 23242526
               </span>
             </div>
             <h2 className="text-xl font-black text-white tracking-wide uppercase mt-1">
@@ -343,11 +341,11 @@ export default function App() {
             </div>
           )}
 
-          {/* FILTER BAR */}
+          {/* FILTER DATA */}
           <div className="bg-[#121722] border border-slate-800 rounded-2xl p-4 space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                🔍 FILTER DATA
+                🔍 FILTER DATA (REKAP INVOICE)
               </span>
               <button
                 onClick={handleResetFilter}
@@ -365,8 +363,10 @@ export default function App() {
                 className="bg-[#0b0e14] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
               >
                 <option value="Semua tahun">Semua tahun</option>
-                <option value="2025">2025</option>
                 <option value="2026">2026</option>
+                <option value="2025">2025</option>
+                <option value="2024">2024</option>
+                <option value="2023">2023</option>
               </select>
 
               <select
@@ -424,13 +424,14 @@ export default function App() {
               >
                 <option value="Semua status">Semua status</option>
                 <option value="Lunas">Lunas</option>
-                <option value="Belum Lunas">Belum Lunas</option>
-                <option value="Bayar Lebih">Bayar Lebih</option>
+                <option value="Kurang Bayar">Kurang Bayar</option>
+                <option value="Lebih Bayar">Lebih Bayar</option>
+                <option value="Belum Ada Pembayaran">Belum Ada Pembayaran</option>
               </select>
             </div>
           </div>
 
-          {/* TAB 1 & 2: DASHBOARD OVERVIEW & SALES PERFORMANCE */}
+          {/* METRICS OVERVIEW */}
           {(activeTab === "dashboard" || activeTab === "kpi") && (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -440,10 +441,10 @@ export default function App() {
                 </div>
 
                 <div className="bg-[#121722] border border-emerald-500/30 rounded-2xl p-5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">CASH IN</span>
-                  <p className="text-xl font-bold text-emerald-400 mt-2">{formatIDR(totalCashIn)}</p>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">CASH IN / DANA MASUK</span>
+                  <p className="text-xl font-bold text-emerald-400 mt-2">{formatIDR(totalDanaMasuk)}</p>
                   <span className="text-[10px] text-emerald-500 font-semibold">
-                    {totalRevenue ? ((totalCashIn / totalRevenue) * 100).toFixed(1) : 0}% collection rate
+                    {totalRevenue ? ((totalDanaMasuk / totalRevenue) * 100).toFixed(1) : 0}% collection rate
                   </span>
                 </div>
 
@@ -458,6 +459,7 @@ export default function App() {
                 </div>
               </div>
 
+              {/* SALES INDIVIDUAL CARDS */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                   PERFORMA SALES PERSON INDIVIDUAL
@@ -493,8 +495,8 @@ export default function App() {
             </>
           )}
 
-          {/* TAB 3: MASTER INVOICE & TAB LAINNYA */}
-          {(activeTab === "invoice" || activeTab === "outstanding2026" || activeTab === "cashinall" || activeTab === "jobid") && (
+          {/* TAB: MASTER INVOICE & CASH IN ALL & OUTSTANDING */}
+          {(activeTab === "invoice" || activeTab === "outstanding" || activeTab === "cashinall") && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 uppercase">
                 {NAV_ITEMS.find((n) => n.id === activeTab)?.label}
@@ -503,29 +505,45 @@ export default function App() {
                 <table className="w-full text-left text-xs text-slate-300">
                   <thead className="bg-[#0b0e14] text-slate-400 uppercase text-[10px]">
                     <tr>
-                      <th className="p-3">Tahun</th>
+                      <th className="p-3">Thn</th>
                       <th className="p-3">Bulan</th>
                       <th className="p-3">No Invoice</th>
                       <th className="p-3">Customer</th>
-                      <th className="p-3">Sales</th>
-                      <th className="p-3">Total Tagihan</th>
-                      <th className="p-3">Cash In</th>
+                      <th className="p-3">VIA</th>
+                      <th className="p-3">Nilai Invoice</th>
+                      <th className="p-3">Dana Masuk</th>
                       <th className="p-3">Sisa Tagihan</th>
+                      <th className="p-3">Status Invoice</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
                     {filteredInvoices
-                      .filter((inv) => activeTab !== "outstanding2026" || inv.sisaTagihan > 0)
+                      .filter((inv) => activeTab !== "outstanding" || inv.sisaTagihan > 0)
                       .map((inv, idx) => (
                         <tr key={idx} className="hover:bg-slate-800/30">
                           <td className="p-3 text-slate-400">{inv.tahun}</td>
                           <td className="p-3 text-slate-400">{inv.bulan}</td>
                           <td className="p-3 text-blue-400 font-semibold">{inv.noInv || "-"}</td>
                           <td className="p-3">{inv.customer || "-"}</td>
-                          <td className="p-3">{inv.sales || "-"}</td>
+                          <td className="p-3 font-semibold">{inv.sales || "-"}</td>
                           <td className="p-3 font-semibold">{formatIDR(inv.revenue)}</td>
-                          <td className="p-3 text-emerald-400">{formatIDR(inv.cashIn)}</td>
+                          <td className="p-3 text-emerald-400">{formatIDR(inv.danaMasuk)}</td>
                           <td className="p-3 text-amber-400">{formatIDR(inv.sisaTagihan)}</td>
+                          <td className="p-3">
+                            <span
+                              className={`px-2 py-1 rounded text-[10px] font-bold ${
+                                inv.status.toLowerCase().includes("lunas")
+                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  : inv.status.toLowerCase().includes("kurang")
+                                  ? "bg-amber-500/20 text-amber-400"
+                                  : inv.status.toLowerCase().includes("lebih")
+                                  ? "bg-blue-500/20 text-blue-400"
+                                  : "bg-red-500/20 text-red-400"
+                              }`}
+                            >
+                              {inv.status || "Belum Ada"}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                   </tbody>
@@ -534,10 +552,10 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 4: KONTRIBUSI REVENUE 2026 */}
-          {activeTab === "kontribusi2026" && (
+          {/* TAB: KONTRIBUSI REVENUE */}
+          {activeTab === "kontribusi" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
-              <h3 className="text-sm font-bold text-white uppercase">KONTRIBUSI REVENUE PER SALES (2026)</h3>
+              <h3 className="text-sm font-bold text-white uppercase">KONTRIBUSI REVENUE PER SALES</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {salesPerformance.map((sp) => {
                   const percentage = totalRevenue ? ((sp.revenue / totalRevenue) * 100).toFixed(1) : 0;
@@ -558,7 +576,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 5: PERBANDINGAN REVENUE (2025 vs 2026) */}
+          {/* TAB: PERBANDINGAN REVENUE 2025 VS 2026 */}
           {activeTab === "perbandingan" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="text-sm font-bold text-white uppercase">PERBANDINGAN REVENUE 2025 VS 2026 PER BULAN</h3>
@@ -593,18 +611,22 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 6: TO DO LIST SPV */}
+          {/* TAB: JOB ID STATUS */}
+          {activeTab === "jobid" && (
+            <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-3">
+              <h3 className="text-sm font-bold text-white uppercase">JOB ID STATUS</h3>
+              <p className="text-xs text-slate-400">Monitoring status pengerjaan unit / Job ID sewa alat berat.</p>
+            </div>
+          )}
+
+          {/* TAB: TO DO LIST SPV */}
           {activeTab === "todolist" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-3">
               <h3 className="text-sm font-bold text-white uppercase">TO DO LIST SUPERVISOR</h3>
               <ul className="space-y-2 text-xs text-slate-300">
                 <li className="p-3 bg-[#0b0e14] border border-slate-800 rounded-xl flex items-center gap-3">
                   <input type="checkbox" className="rounded bg-slate-800 border-slate-700" />
-                  <span>Follow up penagihan outstanding invoice &gt; 60 hari.</span>
-                </li>
-                <li className="p-3 bg-[#0b0e14] border border-slate-800 rounded-xl flex items-center gap-3">
-                  <input type="checkbox" className="rounded bg-slate-800 border-slate-700" />
-                  <span>Review ketersediaan unit alat berat untuk penawaran bulan berjalan.</span>
+                  <span>Follow up penagihan status Kurang Bayar &amp; Outstanding invoice.</span>
                 </li>
                 <li className="p-3 bg-[#0b0e14] border border-slate-800 rounded-xl flex items-center gap-3">
                   <input type="checkbox" className="rounded bg-slate-800 border-slate-700" />
