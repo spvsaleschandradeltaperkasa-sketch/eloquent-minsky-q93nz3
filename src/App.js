@@ -159,28 +159,44 @@ export default function App() {
     setLoading(true);
     setError(null);
 
-    try {
-      // Memanggil Internal API Vercel Serverless
-      const response = await fetch("/api/sheets");
-      if (!response.ok) {
-        throw new Error("Gagal mengambil data dari API internal.");
-      }
-      const text = await response.text();
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
 
-      if (text && text.length > 50) {
-        const parsedData = parseMasterRekap(text);
-        if (parsedData.length > 0) {
-          setInvoices(parsedData);
-        } else {
-          setError("Header/kolom CSV Google Sheets tidak sesuai.");
+    // Daftar endpoint fetch (Direct, Proxy 1, Proxy 2)
+    const fetchTargets = [
+      sheetUrl,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(sheetUrl)}`,
+      `https://corsproxy.io/?${encodeURIComponent(sheetUrl)}`
+    ];
+
+    let csvText = "";
+    let isSuccess = false;
+
+    for (const target of fetchTargets) {
+      try {
+        const response = await fetch(target);
+        if (response.ok) {
+          csvText = await response.text();
+          if (csvText && csvText.length > 50 && csvText.includes(",")) {
+            isSuccess = true;
+            break;
+          }
         }
-      } else {
-        setError("Data dari Google Sheets kosong.");
+      } catch (e) {
+        console.warn("Gagal via:", target, e);
       }
-    } catch (e) {
-      console.error(e);
-      setError("Gagal menghubungkan dashboard ke Google Sheets.");
     }
+
+    if (isSuccess) {
+      const parsedData = parseMasterRekap(csvText);
+      if (parsedData.length > 0) {
+        setInvoices(parsedData);
+      } else {
+        setError("Data berhasil ditarik tapi format kolom Google Sheets tidak sesuai.");
+      }
+    } else {
+      setError("Gagal menarik data dari Google Sheets. Pastikan spreadsheet sudah di-publish ke publik.");
+    }
+
     setLoading(false);
   };
 
@@ -455,7 +471,7 @@ export default function App() {
 
                 <div className="bg-[#121722] border border-purple-500/30 rounded-2xl p-5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">JUMLAH INVOICE</span>
-                  <p className="2xl font-bold text-white mt-2">{filteredInvoices.length}</p>
+                  <p className="text-xl font-bold text-white mt-2">{filteredInvoices.length}</p>
                 </div>
               </div>
 
