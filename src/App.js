@@ -14,9 +14,6 @@ import {
   CheckSquare
 } from "lucide-react";
 
-// Link Publikasi CSV Google Sheets
-const SPREADSHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
-
 const MONTHS_ORDER = [
   "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
   "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"
@@ -162,42 +159,27 @@ export default function App() {
     setLoading(true);
     setError(null);
 
-    // Daftar Jalur Pengambilan Data (Multi Proxy Bypass)
-    const endpoints = [
-      SPREADSHEET_CSV_URL,
-      `https://corsproxy.io/?${encodeURIComponent(SPREADSHEET_CSV_URL)}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(SPREADSHEET_CSV_URL)}`,
-      `https://thingproxy.freeboard.io/fetch/${SPREADSHEET_CSV_URL}`
-    ];
+    try {
+      // Memanggil Internal API Vercel Serverless
+      const response = await fetch("/api/sheets");
+      if (!response.ok) {
+        throw new Error("Gagal mengambil data dari API internal.");
+      }
+      const text = await response.text();
 
-    let fetchedContent = "";
-    let isSuccess = false;
-
-    for (const url of endpoints) {
-      try {
-        const response = await fetch(url, { cache: "no-store" });
-        if (response.ok) {
-          const text = await response.text();
-          if (text && text.length > 50 && !text.includes("<!DOCTYPE html>")) {
-            fetchedContent = text;
-            isSuccess = true;
-            break;
-          }
+      if (text && text.length > 50) {
+        const parsedData = parseMasterRekap(text);
+        if (parsedData.length > 0) {
+          setInvoices(parsedData);
+        } else {
+          setError("Header/kolom CSV Google Sheets tidak sesuai.");
         }
-      } catch (e) {
-        console.warn("Attempt failed for URL:", url);
-      }
-    }
-
-    if (isSuccess && fetchedContent) {
-      const parsedData = parseMasterRekap(fetchedContent);
-      if (parsedData.length > 0) {
-        setInvoices(parsedData);
       } else {
-        setError("Data CSV terhubung, namun nama kolom di Google Sheets tidak sesuai.");
+        setError("Data dari Google Sheets kosong.");
       }
-    } else {
-      setError("Gagal menarik data dari Google Sheets. Pastikan koneksi internet stabil.");
+    } catch (e) {
+      console.error(e);
+      setError("Gagal menghubungkan dashboard ke Google Sheets.");
     }
     setLoading(false);
   };
@@ -473,7 +455,7 @@ export default function App() {
 
                 <div className="bg-[#121722] border border-purple-500/30 rounded-2xl p-5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">JUMLAH INVOICE</span>
-                  <p className="text-2xl font-bold text-white mt-2">{filteredInvoices.length}</p>
+                  <p className="2xl font-bold text-white mt-2">{filteredInvoices.length}</p>
                 </div>
               </div>
 
