@@ -14,8 +14,8 @@ import {
   CheckSquare
 } from "lucide-react";
 
-// Link Google Sheets CSV Publikasi Resmi (GID Sheet REKAP INVOICE: 586995800)
-const ORIGINAL_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
+// Link Publikasi CSV Google Sheets
+const SPREADSHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
 
 const MONTHS_ORDER = [
   "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
@@ -162,41 +162,42 @@ export default function App() {
     setLoading(true);
     setError(null);
 
-    // Daftar Proxy CORS Cadangan untuk Memastikan Data Terambil
-    const urlsToTry = [
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(ORIGINAL_URL)}`,
-      `https://corsproxy.io/?${encodeURIComponent(ORIGINAL_URL)}`,
-      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(ORIGINAL_URL)}`,
-      ORIGINAL_URL
+    // Daftar Jalur Pengambilan Data (Multi Proxy Bypass)
+    const endpoints = [
+      SPREADSHEET_CSV_URL,
+      `https://corsproxy.io/?${encodeURIComponent(SPREADSHEET_CSV_URL)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(SPREADSHEET_CSV_URL)}`,
+      `https://thingproxy.freeboard.io/fetch/${SPREADSHEET_CSV_URL}`
     ];
 
-    let resText = "";
-    let success = false;
+    let fetchedContent = "";
+    let isSuccess = false;
 
-    for (const url of urlsToTry) {
+    for (const url of endpoints) {
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { cache: "no-store" });
         if (response.ok) {
-          resText = await response.text();
-          if (resText && resText.length > 50 && !resText.includes("<!DOCTYPE html>")) {
-            success = true;
+          const text = await response.text();
+          if (text && text.length > 50 && !text.includes("<!DOCTYPE html>")) {
+            fetchedContent = text;
+            isSuccess = true;
             break;
           }
         }
       } catch (e) {
-        console.warn("Gagal di URL proxy:", url);
+        console.warn("Attempt failed for URL:", url);
       }
     }
 
-    if (success && resText) {
-      const parsedData = parseMasterRekap(resText);
+    if (isSuccess && fetchedContent) {
+      const parsedData = parseMasterRekap(fetchedContent);
       if (parsedData.length > 0) {
         setInvoices(parsedData);
       } else {
-        setError("Data berhasil ditarik, tetapi format header kolom tidak dikenali.");
+        setError("Data CSV terhubung, namun nama kolom di Google Sheets tidak sesuai.");
       }
     } else {
-      setError("Gagal menarik data dari Google Sheets. Periksa koneksi internet atau status publikasi CSV.");
+      setError("Gagal menarik data dari Google Sheets. Pastikan koneksi internet stabil.");
     }
     setLoading(false);
   };
@@ -286,7 +287,6 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-[#0b0e14] text-slate-100 font-sans overflow-hidden">
-      {/* SIDEBAR NAVIGATION */}
       <aside className="w-72 bg-[#121722] border-r border-slate-800 flex flex-col justify-between shrink-0">
         <div>
           <div className="p-4 border-b border-slate-800/80 flex items-center gap-3">
@@ -330,7 +330,6 @@ export default function App() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col overflow-y-auto">
         <header className="p-6 border-b border-slate-800 flex justify-between items-center bg-[#121722]/50">
           <div>
@@ -362,7 +361,6 @@ export default function App() {
             </div>
           )}
 
-          {/* FILTER CONTROLS */}
           <div className="bg-[#121722] border border-slate-800 rounded-2xl p-4 space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -452,7 +450,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* DASHBOARD SUMMARY & SALES CARDS */}
           {(activeTab === "dashboard" || activeTab === "kpi") && (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -515,7 +512,6 @@ export default function App() {
             </>
           )}
 
-          {/* MASTER INVOICE & OUTSTANDING & CASH IN ALL */}
           {(activeTab === "invoice" || activeTab === "outstanding" || activeTab === "cashinall") && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 uppercase">
@@ -572,7 +568,6 @@ export default function App() {
             </div>
           )}
 
-          {/* KONTRIBUSI REVENUE */}
           {activeTab === "kontribusi" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="text-sm font-bold text-white uppercase">KONTRIBUSI REVENUE PER SALES</h3>
@@ -596,7 +591,6 @@ export default function App() {
             </div>
           )}
 
-          {/* PERBANDINGAN REVENUE */}
           {activeTab === "perbandingan" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="text-sm font-bold text-white uppercase">PERBANDINGAN REVENUE 2025 VS 2026 PER BULAN</h3>
@@ -631,7 +625,6 @@ export default function App() {
             </div>
           )}
 
-          {/* JOB ID STATUS */}
           {activeTab === "jobid" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-3">
               <h3 className="text-sm font-bold text-white uppercase">JOB ID STATUS</h3>
@@ -639,7 +632,6 @@ export default function App() {
             </div>
           )}
 
-          {/* TO DO LIST SPV */}
           {activeTab === "todolist" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-3">
               <h3 className="text-sm font-bold text-white uppercase">TO DO LIST SUPERVISOR</h3>
