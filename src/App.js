@@ -13,7 +13,6 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [jenisFilter, setJenisFilter] = useState('ALL');
 
-  // URL CSV khusus Tab REKAP INVOICE 23242526 yang sudah dipublikasikan
   const publishedCsvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYKXc-rzon8VqYa1SEYc_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYtvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
 
   const parseCSVLine = (line) => {
@@ -58,7 +57,6 @@ export default function App() {
         obj[h.trim()] = row[index] || '';
       });
 
-      // Mapping kolom sesuai struktur Google Sheets kamu
       const appsheetId = obj['Appsheet ID'] || `ROW-${i}`;
       const timestamp = obj['Timestamp'] || '';
       const transactionNumber = obj['Transaction Number'] || '';
@@ -72,11 +70,9 @@ export default function App() {
       const jenisPenyewa = obj['Jenis Penyewa'] || '';
       const kodeUnit = obj['Kode Unit'] || '';
 
-      // Menangkap nilai nominal / piutang (biasanya ada di kolom M, N, O atau penyesuaian header angka)
       let nilaiInvoice = 0;
       Object.keys(obj).forEach(key => {
         const val = obj[key];
-        // Cek jika kolom berupa angka besar / nilai uang
         if (key !== 'Transaction Number' && key !== 'Appsheet ID' && !isNaN(val) && val.length > 3) {
           const num = parseFloat(val);
           if (num > 1000 && nilaiInvoice === 0) {
@@ -110,11 +106,16 @@ export default function App() {
     setError(null);
 
     try {
-      const response = await fetch(publishedCsvUrl);
+      // Menggunakan proxy CORS publik agar Vercel bebas membaca Google Sheets tanpa blokir
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(publishedCsvUrl)}`;
+      const response = await fetch(proxyUrl);
+      
       if (!response.ok) {
         throw new Error("Gagal mengambil data dari Google Sheets.");
       }
-      const csvText = await response.text();
+      
+      const data = await response.json();
+      const csvText = data.contents;
 
       if (csvText && csvText.length > 50) {
         const parsedData = parseMasterRekap(csvText);
@@ -124,7 +125,15 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
-      setError("Gagal menghubungi Google Sheets. Periksa publikasi web sheet Anda.");
+      // Fallback langsung jika proxy gagal
+      try {
+        const directRes = await fetch(publishedCsvUrl);
+        const directText = await directRes.text();
+        const parsedData = parseMasterRekap(directText);
+        setInvoices(parsedData);
+      } catch (err) {
+        setError("Gagal menghubungi Google Sheets. Pastikan sheet sudah dipublikasikan ke web sebagai CSV.");
+      }
     }
 
     setLoading(false);
@@ -134,17 +143,15 @@ export default function App() {
     fetchData();
   }, []);
 
-  // Statistik & Perhitungan Dashboard
   const stats = useMemo(() => {
     const totalData = invoices.length;
-    const totalNilai = invoices.reduce((acc, curr) => acc + (curr.nilaiInvoice || 0), 1);
+    const totalNilai = invoices.reduce((acc, curr) => acc + (curr.nilaiInvoice || 0), 0);
     const onJobCount = invoices.filter(item => item.onJobOrNot.toUpperCase().includes('ON JOB')).length;
     const standbyCount = invoices.filter(item => item.onJobOrNot.toUpperCase().includes('STANDBY')).length;
 
     return { totalData, totalNilai, onJobCount, standbyCount };
   }, [invoices]);
 
-  // Filter Data Berdasarkan Pencarian & Status
   const filteredInvoices = useMemo(() => {
     return invoices.filter(item => {
       const matchSearch = 
@@ -165,7 +172,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-800 pb-6">
         <div>
           <div className="flex items-center gap-2 text-blue-400 font-semibold text-sm mb-1">
@@ -187,7 +193,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* ERROR NOTIFICATION */}
       {error && (
         <div className="bg-red-950/50 border border-red-800 text-red-200 p-4 rounded-xl mb-6 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
@@ -195,7 +200,6 @@ export default function App() {
         </div>
       )}
 
-      {/* STATS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-sm">
           <div className="flex justify-between items-center text-slate-400 mb-2">
@@ -234,7 +238,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* FILTER & SEARCH BAR */}
       <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-2xl mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="relative w-full md:w-96">
           <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
@@ -271,7 +274,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* TABLE DATA */}
       <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
