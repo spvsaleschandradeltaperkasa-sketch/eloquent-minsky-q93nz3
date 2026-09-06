@@ -159,30 +159,36 @@ export default function App() {
     setLoading(true);
     setError(null);
 
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
+    // ID Spreadsheet & GID Publik kamu
+    const sheetId = "2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C";
+    const gid = "586995800";
 
-    // Daftar endpoint fetch (Direct, Proxy 1, Proxy 2)
-    const fetchTargets = [
-      sheetUrl,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(sheetUrl)}`,
-      `https://corsproxy.io/?${encodeURIComponent(sheetUrl)}`
+    const csvPublishUrl = `https://docs.google.com/spreadsheets/d/e/${sheetId}/pub?gid=${gid}&single=true&output=csv`;
+
+    // Daftar Proxy CORS Publik untuk menghindari blokir Vercel/Browser
+    const proxyUrls = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(csvPublishUrl)}`,
+      `https://corsproxy.io/?${encodeURIComponent(csvPublishUrl)}`,
+      `https://thingproxy.freeboard.io/fetch/${csvPublishUrl}`,
+      csvPublishUrl
     ];
 
     let csvText = "";
     let isSuccess = false;
 
-    for (const target of fetchTargets) {
+    for (const url of proxyUrls) {
       try {
-        const response = await fetch(target);
+        const response = await fetch(url);
         if (response.ok) {
-          csvText = await response.text();
-          if (csvText && csvText.length > 50 && csvText.includes(",")) {
+          const text = await response.text();
+          if (text && text.length > 50 && (text.includes(",") || text.includes("\n"))) {
+            csvText = text;
             isSuccess = true;
             break;
           }
         }
       } catch (e) {
-        console.warn("Gagal via:", target, e);
+        console.warn("Proxy gagal, mencoba opsi lain...", url, e);
       }
     }
 
@@ -191,10 +197,12 @@ export default function App() {
       if (parsedData.length > 0) {
         setInvoices(parsedData);
       } else {
-        setError("Data berhasil ditarik tapi format kolom Google Sheets tidak sesuai.");
+        setError("Data berhasil ditarik tetapi header/kolom di spreadsheet belum sesuai format.");
       }
     } else {
-      setError("Gagal menarik data dari Google Sheets. Pastikan spreadsheet sudah di-publish ke publik.");
+      setError(
+        "Gagal menarik data dari Google Sheets. Pastikan akses Google Sheets di-set 'Anyone with the link' (Siapa saja yang memiliki link) dan sudah di-Publish to Web."
+      );
     }
 
     setLoading(false);
