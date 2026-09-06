@@ -148,7 +148,7 @@ const formatIDR = (val) => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("kpi");
+  const [activeTab, setActiveTab] = useState("perbandingan");
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -216,6 +216,30 @@ export default function App() {
   const totalRevenue = useMemo(() => filteredInvoices.reduce((acc, curr) => acc + curr.revenue, 0), [filteredInvoices]);
   const totalCashIn = useMemo(() => filteredInvoices.reduce((acc, curr) => acc + curr.cashIn, 0), [filteredInvoices]);
   const totalSisa = useMemo(() => filteredInvoices.reduce((acc, curr) => acc + curr.sisaTagihan, 0), [filteredInvoices]);
+
+  const monthlyComparison = useMemo(() => {
+    return MONTHS_ORDER.map((m) => {
+      const data2025 = invoices.filter(
+        (x) => x.tahun === "2025" && x.bulan.includes(m) && (filterSales === "Semua sales / VIA" || x.sales.includes(filterSales))
+      );
+      const data2026 = invoices.filter(
+        (x) => x.tahun === "2026" && x.bulan.includes(m) && (filterSales === "Semua sales / VIA" || x.sales.includes(filterSales))
+      );
+
+      const rev2025 = data2025.reduce((a, b) => a + b.revenue, 0);
+      const rev2026 = data2026.reduce((a, b) => a + b.revenue, 0);
+      const diff = rev2026 - rev2025;
+      const growth = rev2025 > 0 ? ((diff / rev2025) * 100).toFixed(1) : 0;
+
+      return {
+        month: m,
+        rev2025,
+        rev2026,
+        diff,
+        growth
+      };
+    });
+  }, [invoices, filterSales]);
 
   const salesPerformance = useMemo(() => {
     return SALES_LIST.map((code) => {
@@ -289,7 +313,6 @@ export default function App() {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col overflow-y-auto">
-        {/* HEADER BAR */}
         <header className="p-6 border-b border-slate-800 flex justify-between items-center bg-[#121722]/50">
           <div>
             <div className="flex items-center gap-2">
@@ -407,7 +430,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* DASHBOARD OVERVIEW & KPI */}
+          {/* TAB 1 & 2: DASHBOARD OVERVIEW & SALES PERFORMANCE */}
           {(activeTab === "dashboard" || activeTab === "kpi") && (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -470,8 +493,8 @@ export default function App() {
             </>
           )}
 
-          {/* MASTER INVOICE & MONITORING */}
-          {(activeTab === "invoice" || activeTab === "outstanding2026" || activeTab === "cashinall") && (
+          {/* TAB 3: MASTER INVOICE & TAB LAINNYA YANG MEMBUTUHKAN TABEL */}
+          {(activeTab === "invoice" || activeTab === "outstanding2026" || activeTab === "cashinall" || activeTab === "jobid") && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 uppercase">
                 {NAV_ITEMS.find((n) => n.id === activeTab)?.label}
@@ -506,6 +529,86 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* TAB 4: KONTRIBUSI REVENUE 2026 */}
+          {activeTab === "kontribusi2026" && (
+            <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
+              <h3 className="text-sm font-bold text-white uppercase">KONTRIBUSI REVENUE PER SALES (2026)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {salesPerformance.map((sp) => {
+                  const percentage = totalRevenue ? ((sp.revenue / totalRevenue) * 100).toFixed(1) : 0;
+                  return (
+                    <div key={sp.code} className="p-4 bg-[#0b0e14] border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-white text-sm">{sp.code}</span>
+                        <span className="text-xs font-semibold text-blue-400">{percentage}%</span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div className="bg-blue-500 h-full" style={{ width: `${Math.min(percentage, 100)}%` }}></div>
+                      </div>
+                      <p className="text-xs text-slate-400">{formatIDR(sp.revenue)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: PERBANDINGAN REVENUE (2025 vs 2026) */}
+          {activeTab === "perbandingan" && (
+            <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
+              <h3 className="text-sm font-bold text-white uppercase">PERBANDINGAN REVENUE 2025 VS 2026 PER BULAN</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-[#0b0e14] text-slate-400 uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3">Bulan</th>
+                      <th className="p-3">Revenue 2025</th>
+                      <th className="p-3">Revenue 2026</th>
+                      <th className="p-3">Selisih</th>
+                      <th className="p-3">Pertumbuhan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {monthlyComparison.map((m, idx) => (
+                      <tr key={idx} className="hover:bg-slate-800/30">
+                        <td className="p-3 font-semibold text-white">{m.month}</td>
+                        <td className="p-3 text-slate-400">{formatIDR(m.rev2025)}</td>
+                        <td className="p-3 text-emerald-400 font-semibold">{formatIDR(m.rev2026)}</td>
+                        <td className={`p-3 font-semibold ${m.diff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {formatIDR(m.diff)}
+                        </td>
+                        <td className={`p-3 font-bold ${m.growth >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {m.growth}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: TO DO LIST SPV */}
+          {activeTab === "todolist" && (
+            <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-3">
+              <h3 className="text-sm font-bold text-white uppercase">TO DO LIST SUPERVISOR</h3>
+              <ul className="space-y-2 text-xs text-slate-300">
+                <li className="p-3 bg-[#0b0e14] border border-slate-800 rounded-xl flex items-center gap-3">
+                  <input type="checkbox" className="rounded bg-slate-800 border-slate-700" />
+                  <span>Follow up penagihan outstanding invoice &gt; 60 hari.</span>
+                </li>
+                <li className="p-3 bg-[#0b0e14] border border-slate-800 rounded-xl flex items-center gap-3">
+                  <input type="checkbox" className="rounded bg-slate-800 border-slate-700" />
+                  <span>Review ketersediaan unit alat berat untuk penawaran bulan berjalan.</span>
+                </li>
+                <li className="p-3 bg-[#0b0e14] border border-slate-800 rounded-xl flex items-center gap-3">
+                  <input type="checkbox" className="rounded bg-slate-800 border-slate-700" />
+                  <span>Verifikasi rekap pencairan Cash In bulanan dengan tim keuangan.</span>
+                </li>
+              </ul>
             </div>
           )}
         </div>
