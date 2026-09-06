@@ -8,13 +8,11 @@ import {
   Users,
 } from "lucide-react";
 
-// KONFIGURASI MULTI-URL SPREADSHEET
 const URL_2025 =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=181359356&single=true&output=csv";
 const URL_2026 =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
 
-// DAFTAR BULAN UNTUK LOGIKA TARGET
 const MONTHS_ORDER = [
   "JANUARI",
   "FEBRUARI",
@@ -35,7 +33,6 @@ export default function App() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Filter States
   const [filterTahun, setFilterTahun] = useState("2026");
   const [filterBulan, setFilterBulan] = useState("September");
   const [filterNoInvoice, setFilterNoInvoice] = useState("");
@@ -43,17 +40,16 @@ export default function App() {
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
 
-  // FUNGSI DINAMIS TARGET BERDASARKAN BULAN & TAHUN
   const getSalesTargets = (tahun, bulan) => {
-    let cdpRev = 2000000000; // 2M
-    let cdpCash = 2000000000; // 2M
+    let cdpRev = 2000000000;
+    let cdpCash = 2000000000;
 
     if (tahun === "2026" && bulan !== "Semua bulan") {
       const monthIndex = MONTHS_ORDER.indexOf(bulan.toUpperCase());
       const sepIndex = MONTHS_ORDER.indexOf("SEPTEMBER");
 
       if (monthIndex >= sepIndex) {
-        cdpRev = 4000000000; // 4M mulai September 2026
+        cdpRev = 4000000000;
         cdpCash = 4000000000;
       }
     }
@@ -182,6 +178,11 @@ export default function App() {
 
   const filteredData = useMemo(() => {
     return invoices.filter((item) => {
+      const st = item.status ? item.status.toLowerCase().trim() : "";
+      const isLebih = st.includes("lebih") || item.sisaTagihan < 0;
+      const isLunas =
+        st.includes("lunas") || (item.sisaTagihan === 0 && item.danaMasuk > 0);
+
       if (filterTahun !== "Semua tahun" && item.tahun !== filterTahun)
         return false;
       if (
@@ -204,11 +205,23 @@ export default function App() {
         item.via.toUpperCase() !== filterSales.toUpperCase()
       )
         return false;
+
+      // Logika Filter Status Lengkap
       if (filterStatus !== "Semua status") {
         if (filterStatus === "Belum Lunas (Kurang Bayar & Belum Bayar)") {
-          if (item.status === "Lunas") return false;
-        } else if (item.status !== filterStatus) {
-          return false;
+          if (isLunas || isLebih) return false;
+        } else if (filterStatus === "Lebih Bayar") {
+          if (!isLebih) return false;
+        } else if (filterStatus === "Lunas") {
+          if (!isLunas) return false;
+        } else if (filterStatus === "Kurang Bayar") {
+          if (
+            !st.includes("kurang") &&
+            !(item.sisaTagihan > 0 && item.danaMasuk > 0)
+          )
+            return false;
+        } else if (filterStatus === "Belum ada Pembayaran") {
+          if (!st.includes("belum ada") && item.danaMasuk !== 0) return false;
         }
       }
       return true;
@@ -242,6 +255,11 @@ export default function App() {
     const map = {};
     filteredData.forEach((row) => {
       const sales = row.via || "Lainnya";
+      const st = row.status ? row.status.toLowerCase().trim() : "";
+      const isLebih = st.includes("lebih") || row.sisaTagihan < 0;
+      const isLunas =
+        st.includes("lunas") || (row.sisaTagihan === 0 && row.danaMasuk > 0);
+
       if (!map[sales]) {
         map[sales] = {
           sales,
@@ -258,7 +276,7 @@ export default function App() {
       map[sales].totalSisaTagihan += row.sisaTagihan;
       map[sales].totalCount += 1;
 
-      if (row.status === "Lunas") {
+      if (isLunas || isLebih) {
         map[sales].lunasCount += 1;
       } else {
         map[sales].outstandingCount += 1;
@@ -301,7 +319,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen bg-slate-900 font-sans text-slate-100 antialiased selection:bg-red-500 selection:text-white">
-      {/* Sidebar Mewah dengan Aksen Navy Gelap & Red Glow */}
+      {/* Sidebar */}
       <aside className="w-72 bg-slate-950/80 backdrop-blur-xl text-slate-300 flex flex-col justify-between p-5 shrink-0 border-r border-slate-800/80 shadow-2xl">
         <div>
           <div className="flex items-center gap-3.5 px-3 py-4 mb-6 border-b border-slate-800/80">
@@ -464,6 +482,7 @@ export default function App() {
               <option>UCI</option>
             </select>
 
+            {/* Dropdown Status Lengkap dengan Opsi Lebih Bayar */}
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
@@ -471,6 +490,7 @@ export default function App() {
             >
               <option>Semua status</option>
               <option>Lunas</option>
+              <option>Lebih Bayar</option>
               <option>Kurang Bayar</option>
               <option>Belum ada Pembayaran</option>
               <option>Belum Lunas (Kurang Bayar & Belum Bayar)</option>
@@ -672,7 +692,7 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div className="bg-emerald-950/20 border border-emerald-900/30 rounded-xl p-2.5 text-center">
                           <span className="block text-[9px] font-bold text-emerald-400 uppercase">
-                            Lunas
+                            Lunas / Lebih Bayar
                           </span>
                           <span className="font-bold text-white text-xs">
                             {item.lunasCount} Inv
@@ -732,49 +752,80 @@ export default function App() {
                       </td>
                     </tr>
                   ) : (
-                    filteredData.map((row) => (
-                      <tr
-                        key={row.id}
-                        className="hover:bg-slate-900/40 transition-colors"
-                      >
-                        <td className="p-3.5 font-bold text-slate-300">
-                          {row.tahun}
-                        </td>
-                        <td className="p-3.5 font-semibold text-white">
-                          {row.noInvoice}
-                        </td>
-                        <td className="p-3.5 text-slate-400">{row.tanggal}</td>
-                        <td className="p-3.5 text-slate-300 font-semibold">
-                          {row.bulan}
-                        </td>
-                        <td className="p-3.5 text-slate-200">{row.customer}</td>
-                        <td className="p-3.5 text-red-400 font-bold">
-                          {row.via}
-                        </td>
-                        <td className="p-3.5 text-right font-semibold text-white">
-                          {formatRupiah(row.nilaiInvoice)}
-                        </td>
-                        <td className="p-3.5 text-right font-semibold text-emerald-400">
-                          {formatRupiah(row.danaMasuk)}
-                        </td>
-                        <td className="p-3.5 text-right font-semibold text-red-400">
-                          {formatRupiah(row.sisaTagihan)}
-                        </td>
-                        <td className="p-3.5">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                              row.status === "Lunas"
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                : row.status === "Kurang Bayar"
-                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                    filteredData.map((row) => {
+                      const st = row.status
+                        ? row.status.toLowerCase().trim()
+                        : "";
+                      const isLebih =
+                        st.includes("lebih") || row.sisaTagihan < 0;
+                      const isLunas =
+                        st.includes("lunas") ||
+                        (row.sisaTagihan === 0 && row.danaMasuk > 0);
+                      const isKurang =
+                        st.includes("kurang") ||
+                        (row.sisaTagihan > 0 && row.danaMasuk > 0);
+
+                      let badgeStyle =
+                        "bg-red-500/10 text-red-400 border-red-500/20";
+                      if (isLebih) {
+                        badgeStyle =
+                          "bg-cyan-500/20 text-cyan-300 border-cyan-500/40";
+                      } else if (isLunas) {
+                        badgeStyle =
+                          "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                      } else if (isKurang) {
+                        badgeStyle =
+                          "bg-amber-500/10 text-amber-400 border-amber-500/20";
+                      }
+
+                      return (
+                        <tr
+                          key={row.id}
+                          className="hover:bg-slate-900/40 transition-colors"
+                        >
+                          <td className="p-3.5 font-bold text-slate-300">
+                            {row.tahun}
+                          </td>
+                          <td className="p-3.5 font-semibold text-white">
+                            {row.noInvoice}
+                          </td>
+                          <td className="p-3.5 text-slate-400">
+                            {row.tanggal}
+                          </td>
+                          <td className="p-3.5 text-slate-300 font-semibold">
+                            {row.bulan}
+                          </td>
+                          <td className="p-3.5 text-slate-200">
+                            {row.customer}
+                          </td>
+                          <td className="p-3.5 text-red-400 font-bold">
+                            {row.via}
+                          </td>
+                          <td className="p-3.5 text-right font-semibold text-white">
+                            {formatRupiah(row.nilaiInvoice)}
+                          </td>
+                          <td className="p-3.5 text-right font-semibold text-emerald-400">
+                            {formatRupiah(row.danaMasuk)}
+                          </td>
+                          <td
+                            className={`p-3.5 text-right font-semibold ${
+                              row.sisaTagihan <= 0
+                                ? "text-emerald-400"
+                                : "text-red-400"
                             }`}
                           >
-                            {row.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+                            {formatRupiah(row.sisaTagihan)}
+                          </td>
+                          <td className="p-3.5">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${badgeStyle}`}
+                            >
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
