@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  TrendingUp, FileText, CheckCircle, Clock, AlertTriangle, 
-  Search, RefreshCw, Layers, DollarSign, Calendar, Building, 
-  ArrowUpRight, AlertCircle, ExternalLink, Filter
+  FileText, CheckCircle, Clock, 
+  Search, RefreshCw, DollarSign, Building, 
+  AlertCircle
 } from 'lucide-react';
 
 export default function App() {
@@ -13,7 +13,8 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [jenisFilter, setJenisFilter] = useState('ALL');
 
-  const publishedCsvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?output=csv;
+  // TEMPEL LINK CSV "SELURUH DOKUMEN" YANG BARU KAMU SALIN DI SINI:
+  const publishedCsvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYKXc-rzon8VqYa1SEYc_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYtvAYYoTIMQu03C/pub?output=csv";
 
   const parseCSVLine = (line) => {
     const result = [];
@@ -45,12 +46,21 @@ export default function App() {
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     if (lines.length < 2) return [];
 
-    const headers = parseCSVLine(lines[0]);
+    // Cari baris header yang mengandung kata 'Appsheet ID' atau 'Nama Penyewa'
+    let headerIndex = 0;
+    for (let i = 0; i < Math.min(lines.length, 10); i++) {
+      if (lines[i].includes('Appsheet ID') || lines[i].includes('Nama Penyewa')) {
+        headerIndex = i;
+        break;
+      }
+    }
+
+    const headers = parseCSVLine(lines[headerIndex]);
     const parsedData = [];
 
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = headerIndex + 1; i < lines.length; i++) {
       const row = parseCSVLine(lines[i]);
-      if (row.length < headers.length) continue;
+      if (row.length < 2) continue;
 
       const obj = {};
       headers.forEach((h, index) => {
@@ -60,15 +70,14 @@ export default function App() {
       const appsheetId = obj['Appsheet ID'] || `ROW-${i}`;
       const timestamp = obj['Timestamp'] || '';
       const transactionNumber = obj['Transaction Number'] || '';
-      const sortDate = obj['Sort By Date and Time Number'] || '';
       const onJobOrNot = obj['On Job or Not'] || obj['On Job'] || '';
-      const jobDuration = obj['Job ID Number'] || obj['Job Duration'] || '0';
-      const jobId = obj['Job ID'] || '';
-      const statusVia = obj['Status Via'] || obj['Status'] || '';
       const jenisSewa = obj['Jenis Sewa'] || '';
-      const namaPenyewa = obj['Nama Penyewa'] || 'Tanpa Nama';
+      const namaPenyewa = obj['Nama Penyewa'] || '';
       const jenisPenyewa = obj['Jenis Penyewa'] || '';
       const kodeUnit = obj['Kode Unit'] || '';
+
+      // Abaikan baris kosong yang tidak punya nama penyewa atau timestamp
+      if (!timestamp && !namaPenyewa) continue;
 
       let nilaiInvoice = 0;
       Object.keys(obj).forEach(key => {
@@ -85,13 +94,9 @@ export default function App() {
         id: appsheetId,
         timestamp,
         transactionNumber,
-        sortDate,
         onJobOrNot,
-        jobDuration,
-        jobId,
-        statusVia,
         jenisSewa,
-        namaPenyewa,
+        namaPenyewa: namaPenyewa || 'Tanpa Nama',
         jenisPenyewa,
         kodeUnit,
         nilaiInvoice
@@ -106,13 +111,10 @@ export default function App() {
     setError(null);
 
     try {
-      // Menggunakan proxy CORS publik agar Vercel bebas membaca Google Sheets tanpa blokir
       const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(publishedCsvUrl)}`;
       const response = await fetch(proxyUrl);
       
-      if (!response.ok) {
-        throw new Error("Gagal mengambil data dari Google Sheets.");
-      }
+      if (!response.ok) throw new Error("Gagal mengambil data.");
       
       const data = await response.json();
       const csvText = data.contents;
@@ -121,18 +123,16 @@ export default function App() {
         const parsedData = parseMasterRekap(csvText);
         setInvoices(parsedData);
       } else {
-        setError("Data Google Sheets kosong atau tidak dapat dibaca.");
+        setError("Data kosong atau tidak dapat dibaca.");
       }
     } catch (e) {
-      console.error(e);
-      // Fallback langsung jika proxy gagal
       try {
         const directRes = await fetch(publishedCsvUrl);
         const directText = await directRes.text();
         const parsedData = parseMasterRekap(directText);
         setInvoices(parsedData);
       } catch (err) {
-        setError("Gagal menghubungi Google Sheets. Pastikan sheet sudah dipublikasikan ke web sebagai CSV.");
+        setError("Gagal menghubungi Google Sheets. Periksa publikasi web.");
       }
     }
 
@@ -156,7 +156,6 @@ export default function App() {
     return invoices.filter(item => {
       const matchSearch = 
         item.namaPenyewa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.jobId.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.kodeUnit.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchStatus = statusFilter === 'ALL' || item.onJobOrNot.toUpperCase().includes(statusFilter);
@@ -181,16 +180,14 @@ export default function App() {
             Dashboard Rekap Invoice & Unit
           </h1>
         </div>
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <button 
-            onClick={fetchData}
-            disabled={loading}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-lg shadow-blue-900/30 disabled:opacity-50 cursor-pointer w-full md:w-auto justify-center"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? 'Menyinkronkan...' : 'Sync Google Sheets'}
-          </button>
-        </div>
+        <button 
+          onClick={fetchData}
+          disabled={loading}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-lg shadow-blue-900/30 cursor-pointer"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          {loading ? 'Menyinkronkan...' : 'Sync Google Sheets'}
+        </button>
       </div>
 
       {error && (
@@ -201,40 +198,33 @@ export default function App() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-sm">
+        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl">
           <div className="flex justify-between items-center text-slate-400 mb-2">
-            <span className="text-sm font-medium">Total Record / Invoice</span>
+            <span className="text-sm font-medium">Total Record</span>
             <FileText className="w-5 h-5 text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-white">{stats.totalData}</div>
-          <div className="text-xs text-slate-500 mt-1">Data dari Google Sheets</div>
         </div>
-
-        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-sm">
+        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl">
           <div className="flex justify-between items-center text-slate-400 mb-2">
             <span className="text-sm font-medium">Unit On Job</span>
             <CheckCircle className="w-5 h-5 text-emerald-400" />
           </div>
           <div className="text-2xl font-bold text-emerald-400">{stats.onJobCount}</div>
-          <div className="text-xs text-slate-500 mt-1">Beroperasi di lapangan</div>
         </div>
-
-        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-sm">
+        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl">
           <div className="flex justify-between items-center text-slate-400 mb-2">
             <span className="text-sm font-medium">Unit Standby</span>
             <Clock className="w-5 h-5 text-amber-400" />
           </div>
           <div className="text-2xl font-bold text-amber-400">{stats.standbyCount}</div>
-          <div className="text-xs text-slate-500 mt-1">Siap dikerahkan</div>
         </div>
-
-        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-sm">
+        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl">
           <div className="flex justify-between items-center text-slate-400 mb-2">
             <span className="text-sm font-medium">Estimasi Nilai Total</span>
             <DollarSign className="w-5 h-5 text-purple-400" />
           </div>
           <div className="text-xl font-bold text-white truncate">{formatRupiah(stats.totalNilai)}</div>
-          <div className="text-xs text-slate-500 mt-1">Akumulasi rekap</div>
         </div>
       </div>
 
@@ -243,28 +233,26 @@ export default function App() {
           <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
           <input 
             type="text" 
-            placeholder="Cari nama penyewa, job ID, atau kode unit..." 
+            placeholder="Cari nama penyewa atau kode unit..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
           />
         </div>
-
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+        <div className="flex gap-3 w-full md:w-auto">
           <select 
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
+            className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300"
           >
             <option value="ALL">Semua Status</option>
             <option value="ON JOB">ON JOB</option>
             <option value="STANDBY">STANDBY</option>
           </select>
-
           <select 
             value={jenisFilter}
             onChange={(e) => setJenisFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
+            className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300"
           >
             <option value="ALL">Semua Jenis Penyewa</option>
             <option value="SWASTA">SWASTA</option>
@@ -282,7 +270,7 @@ export default function App() {
                 <th className="p-4">Timestamp</th>
                 <th className="p-4">Nama Penyewa</th>
                 <th className="p-4">Jenis Sewa</th>
-                <th className="p-4">Status / Job</th>
+                <th className="p-4">Status</th>
                 <th className="p-4">Kode Unit</th>
                 <th className="p-4 text-right">Nilai / Nominal</th>
               </tr>
@@ -290,20 +278,16 @@ export default function App() {
             <tbody className="divide-y divide-slate-800/60 text-sm">
               {loading && invoices.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-400">
-                    Memuat data dari Google Sheets...
-                  </td>
+                  <td colSpan="6" className="p-8 text-center text-slate-400">Memuat semua data rekap...</td>
                 </tr>
               ) : filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-400">
-                    Tidak ada data yang sesuai dengan pencarian.
-                  </td>
+                  <td colSpan="6" className="p-8 text-center text-slate-400">Tidak ada data yang sesuai filter.</td>
                 </tr>
               ) : (
                 filteredInvoices.map((item, idx) => (
                   <tr key={idx} className="hover:bg-slate-800/40 transition">
-                    <td className="p-4 text-slate-400 text-xs">{item.timestamp || '-'}</td>
+                    <td className="p-4 text-slate-400 text-xs">{item.timestamp}</td>
                     <td className="p-4 font-medium text-white">{item.namaPenyewa}</td>
                     <td className="p-4 text-slate-300">{item.jenisSewa || '-'}</td>
                     <td className="p-4">
