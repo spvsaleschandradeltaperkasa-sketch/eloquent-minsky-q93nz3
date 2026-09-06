@@ -180,8 +180,7 @@ export default function App() {
     return invoices.filter((item) => {
       const st = item.status ? item.status.toLowerCase().trim() : "";
       const isLebih = st.includes("lebih") || item.sisaTagihan < 0;
-      const isLunas =
-        st.includes("lunas") || (item.sisaTagihan === 0 && item.danaMasuk > 0);
+      const isLunas = st.includes("lunas") || (item.sisaTagihan === 0 && item.danaMasuk > 0);
 
       if (filterTahun !== "Semua tahun" && item.tahun !== filterTahun)
         return false;
@@ -206,7 +205,7 @@ export default function App() {
       )
         return false;
 
-      // Logika Filter Status Lengkap
+      // Logika Filter Status
       if (filterStatus !== "Semua status") {
         if (filterStatus === "Belum Lunas (Kurang Bayar & Belum Bayar)") {
           if (isLunas || isLebih) return false;
@@ -215,11 +214,7 @@ export default function App() {
         } else if (filterStatus === "Lunas") {
           if (!isLunas) return false;
         } else if (filterStatus === "Kurang Bayar") {
-          if (
-            !st.includes("kurang") &&
-            !(item.sisaTagihan > 0 && item.danaMasuk > 0)
-          )
-            return false;
+          if (!st.includes("kurang") && !(item.sisaTagihan > 0 && item.danaMasuk > 0)) return false;
         } else if (filterStatus === "Belum ada Pembayaran") {
           if (!st.includes("belum ada") && item.danaMasuk !== 0) return false;
         }
@@ -257,8 +252,7 @@ export default function App() {
       const sales = row.via || "Lainnya";
       const st = row.status ? row.status.toLowerCase().trim() : "";
       const isLebih = st.includes("lebih") || row.sisaTagihan < 0;
-      const isLunas =
-        st.includes("lunas") || (row.sisaTagihan === 0 && row.danaMasuk > 0);
+      const isLunas = st.includes("lunas") || (row.sisaTagihan === 0 && row.danaMasuk > 0);
 
       if (!map[sales]) {
         map[sales] = {
@@ -753,29 +747,18 @@ export default function App() {
                     </tr>
                   ) : (
                     filteredData.map((row) => {
-                      const st = row.status
-                        ? row.status.toLowerCase().trim()
-                        : "";
-                      const isLebih =
-                        st.includes("lebih") || row.sisaTagihan < 0;
-                      const isLunas =
-                        st.includes("lunas") ||
-                        (row.sisaTagihan === 0 && row.danaMasuk > 0);
-                      const isKurang =
-                        st.includes("kurang") ||
-                        (row.sisaTagihan > 0 && row.danaMasuk > 0);
+                      const st = row.status ? row.status.toLowerCase().trim() : "";
+                      const isLebih = st.includes("lebih") || row.sisaTagihan < 0;
+                      const isLunas = st.includes("lunas") || (row.sisaTagihan === 0 && row.danaMasuk > 0);
+                      const isKurang = st.includes("kurang") || (row.sisaTagihan > 0 && row.danaMasuk > 0);
 
-                      let badgeStyle =
-                        "bg-red-500/10 text-red-400 border-red-500/20";
+                      let badgeStyle = "bg-red-500/10 text-red-400 border-red-500/20";
                       if (isLebih) {
-                        badgeStyle =
-                          "bg-cyan-500/20 text-cyan-300 border-cyan-500/40";
+                        badgeStyle = "bg-cyan-500/20 text-cyan-300 border-cyan-500/40";
                       } else if (isLunas) {
-                        badgeStyle =
-                          "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                        badgeStyle = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
                       } else if (isKurang) {
-                        badgeStyle =
-                          "bg-amber-500/10 text-amber-400 border-amber-500/20";
+                        badgeStyle = "bg-amber-500/10 text-amber-400 border-amber-500/20";
                       }
 
                       return (
@@ -789,15 +772,11 @@ export default function App() {
                           <td className="p-3.5 font-semibold text-white">
                             {row.noInvoice}
                           </td>
-                          <td className="p-3.5 text-slate-400">
-                            {row.tanggal}
-                          </td>
+                          <td className="p-3.5 text-slate-400">{row.tanggal}</td>
                           <td className="p-3.5 text-slate-300 font-semibold">
                             {row.bulan}
                           </td>
-                          <td className="p-3.5 text-slate-200">
-                            {row.customer}
-                          </td>
+                          <td className="p-3.5 text-slate-200">{row.customer}</td>
                           <td className="p-3.5 text-red-400 font-bold">
                             {row.via}
                           </td>
