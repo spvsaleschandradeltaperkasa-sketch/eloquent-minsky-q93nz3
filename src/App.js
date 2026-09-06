@@ -7,12 +7,11 @@ import {
   normalizeInvoice, normalizeJobs, normalizeKpi, unique
 } from "./utils";
 
-// --- SUSUNAN MENU SIDEBAR LENGKAP ---
+// NAVIGASI DENGAN MENU BARU
 const NAV = [
   ["dashboard", "⌂", "Overview"],
   ["kpi", "🎯", "Sales Performance"],
   ["invoice", "🧾", "Master Invoice"],
-  // --- MENU BARU ---
   ["outstanding2026", "⚠️", "MONITORING OUTSTANDING INVOICE 2026"],
   ["kontribusi2026", "📊", "KONTRIBUSI REVENUE 2026"],
   ["perbandingan", "📈", "PERBANDINGAN REVENUE BULANAN"],
@@ -62,7 +61,6 @@ export default function App() {
     ...data.invoice.map(x => x.sales), ...data.jobs.map(x => x.sales), ...data.kpi.map(x => x.sales)
   ]), [data]);
 
-  // Kalkulasi Ringkasan Data
   const totalRev = useMemo(() => data.revenue.reduce((a, b) => a + num(b.total), 0), [data]);
   const totalCash = useMemo(() => data.cashIn.reduce((a, b) => a + num(b.total), 0), [data]);
   const sisaTagihan = totalRev - totalCash;
@@ -118,7 +116,7 @@ export default function App() {
           </button>
         </header>
 
-        {/* Dynamic View */}
+        {/* Multi-Tab Tampilan Data */}
         {(page === "dashboard" || page === "kpi") && (
           <div>
             {/* Filter Bar */}
@@ -150,7 +148,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Resume Summary Cards */}
+            {/* Summary Data */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
               <div className="bg-[#0d1425] p-4 rounded-xl border border-blue-500/30">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">Total Revenue</span>
@@ -200,11 +198,10 @@ export default function App() {
           </div>
         )}
 
-        {/* Placeholder untuk Menu Baru */}
         {["outstanding2026", "kontribusi2026", "perbandingan", "jobid", "cashinall"].includes(page) && (
           <div className="bg-[#0d1425] border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-            <p className="text-sm">Modul <b>{NAV.find(n => n[0] === page)?.[2]}</b> telah terhubung.</p>
-            <p className="text-xs text-slate-500 mt-1">Gunakan tombol 'Sync Google Sheets' untuk memperbarui data langsung dari sheet.</p>
+            <p className="text-sm">Halaman <b>{NAV.find(n => n[0] === page)?.[2]}</b> sudah terhubung.</p>
+            <p className="text-xs text-slate-500 mt-1">Klik tombol 'Sync Google Sheets' untuk memperbarui data langsung dari sheet.</p>
           </div>
         )}
       </main>
