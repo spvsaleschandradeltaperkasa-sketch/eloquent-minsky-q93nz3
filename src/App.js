@@ -14,9 +14,8 @@ import {
   CheckSquare
 } from "lucide-react";
 
-// Link Google Sheets CSV Utama
-const SHEET_ID = "2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIRP841n";
-const ORIGINAL_URL = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?gid=0&single=true&output=csv`;
+// Link Google Sheets CSV Publikasi Resmi (GID Sheet REKAP INVOICE: 586995800)
+const ORIGINAL_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
 
 const MONTHS_ORDER = [
   "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
@@ -92,15 +91,14 @@ function parseMasterRekap(text) {
   };
 
   const idxTahun = getIdx(["tahun"]);
-  const idxSales = getIdx(["via"]);
-  const idxInv = getIdx(["no invoice", "nomor invoice", "no. invoice"]);
-  const idxCust = getIdx(["nama customer", "customer"]);
-  const idxRev = getIdx(["nilai invoice"]);
-  const idxDanaMasuk = getIdx(["dana masuk"]);
-  const idxSisa = getIdx(["sisa tagihan"]);
-  const idxStatus = getIdx(["status invoice"]);
+  const idxSales = getIdx(["via", "sales"]);
+  const idxInv = getIdx(["no invoice", "nomor invoice", "no. invoice", "invoice"]);
+  const idxCust = getIdx(["nama customer", "customer", "penyewa"]);
+  const idxRev = getIdx(["nilai invoice", "total invoice", "revenue"]);
+  const idxDanaMasuk = getIdx(["dana masuk", "pembayaran"]);
+  const idxSisa = getIdx(["sisa tagihan", "sisa"]);
+  const idxStatus = getIdx(["status invoice", "status"]);
   const idxMonth = getIdx(["month", "bulan"]);
-  const idxCashIn = getIdx(["cash in"]);
 
   const data = [];
   for (let i = 1; i < lines.length; i++) {
@@ -115,7 +113,6 @@ function parseMasterRekap(text) {
 
     const revVal = idxRev !== -1 ? cleanNumber(row[idxRev]) : 0;
     const danaMasukVal = idxDanaMasuk !== -1 ? cleanNumber(row[idxDanaMasuk]) : 0;
-    const cashInVal = idxCashIn !== -1 ? cleanNumber(row[idxCashIn]) : danaMasukVal;
     const sisaVal = idxSisa !== -1 ? cleanNumber(row[idxSisa]) : revVal - danaMasukVal;
     const statusVal = idxStatus !== -1 ? row[idxStatus] || "" : "";
 
@@ -133,7 +130,6 @@ function parseMasterRekap(text) {
       customer,
       revenue: revVal,
       danaMasuk: danaMasukVal,
-      cashIn: cashInVal,
       sisaTagihan: sisaVal,
       status: statusVal
     });
@@ -166,13 +162,12 @@ export default function App() {
     setLoading(true);
     setError(null);
 
-    // Multi-proxy fallback strategy
+    // Daftar Proxy CORS Cadangan untuk Memastikan Data Terambil
     const urlsToTry = [
-      "/api/fetch-sheets",
       `https://api.allorigins.win/raw?url=${encodeURIComponent(ORIGINAL_URL)}`,
       `https://corsproxy.io/?${encodeURIComponent(ORIGINAL_URL)}`,
-      `https://thingproxy.freeboard.io/fetch/${ORIGINAL_URL}`,
-      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(ORIGINAL_URL)}`
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(ORIGINAL_URL)}`,
+      ORIGINAL_URL
     ];
 
     let resText = "";
@@ -189,7 +184,7 @@ export default function App() {
           }
         }
       } catch (e) {
-        console.warn("Gagal di URL:", url);
+        console.warn("Gagal di URL proxy:", url);
       }
     }
 
@@ -198,10 +193,10 @@ export default function App() {
       if (parsedData.length > 0) {
         setInvoices(parsedData);
       } else {
-        setError("Data berhasil ditarik, namun format kolom CSV tidak sesuai.");
+        setError("Data berhasil ditarik, tetapi format header kolom tidak dikenali.");
       }
     } else {
-      setError("Gagal menarik data dari Google Sheets. Periksa publikasi CSV atau koneksi.");
+      setError("Gagal menarik data dari Google Sheets. Periksa koneksi internet atau status publikasi CSV.");
     }
     setLoading(false);
   };
@@ -481,7 +476,7 @@ export default function App() {
 
                 <div className="bg-[#121722] border border-purple-500/30 rounded-2xl p-5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">JUMLAH INVOICE</span>
-                  <p className="2xl font-bold text-white mt-2">{filteredInvoices.length}</p>
+                  <p className="text-2xl font-bold text-white mt-2">{filteredInvoices.length}</p>
                 </div>
               </div>
 
