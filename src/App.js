@@ -13,8 +13,8 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [jenisFilter, setJenisFilter] = useState('ALL');
 
-  // TEMPEL LINK CSV "SELURUH DOKUMEN" YANG BARU KAMU SALIN DI SINI:
-  const publishedCsvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?output=csv";
+  // Menggunakan link tab rekap spesifik yang stabil
+  const publishedCsvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYKXc-rzon8VqYa1SEYc_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYtvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
 
   const parseCSVLine = (line) => {
     const result = [];
@@ -46,19 +46,10 @@ export default function App() {
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     if (lines.length < 2) return [];
 
-    // Cari baris header yang mengandung kata 'Appsheet ID' atau 'Nama Penyewa'
-    let headerIndex = 0;
-    for (let i = 0; i < Math.min(lines.length, 10); i++) {
-      if (lines[i].includes('Appsheet ID') || lines[i].includes('Nama Penyewa')) {
-        headerIndex = i;
-        break;
-      }
-    }
-
-    const headers = parseCSVLine(lines[headerIndex]);
+    const headers = parseCSVLine(lines[0]);
     const parsedData = [];
 
-    for (let i = headerIndex + 1; i < lines.length; i++) {
+    for (let i = 1; i < lines.length; i++) {
       const row = parseCSVLine(lines[i]);
       if (row.length < 2) continue;
 
@@ -76,7 +67,6 @@ export default function App() {
       const jenisPenyewa = obj['Jenis Penyewa'] || '';
       const kodeUnit = obj['Kode Unit'] || '';
 
-      // Abaikan baris kosong yang tidak punya nama penyewa atau timestamp
       if (!timestamp && !namaPenyewa) continue;
 
       let nilaiInvoice = 0;
@@ -119,11 +109,11 @@ export default function App() {
       const data = await response.json();
       const csvText = data.contents;
 
-      if (csvText && csvText.length > 50) {
+      if (csvText && csvText.length > 20) {
         const parsedData = parseMasterRekap(csvText);
         setInvoices(parsedData);
       } else {
-        setError("Data kosong atau tidak dapat dibaca.");
+        setError("Data kosong.");
       }
     } catch (e) {
       try {
@@ -132,7 +122,7 @@ export default function App() {
         const parsedData = parseMasterRekap(directText);
         setInvoices(parsedData);
       } catch (err) {
-        setError("Gagal menghubungi Google Sheets. Periksa publikasi web.");
+        setError("Gagal menghubungi Google Sheets. Pastikan sheet sudah dipublikasikan.");
       }
     }
 
@@ -282,7 +272,7 @@ export default function App() {
                 </tr>
               ) : filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-400">Tidak ada data yang sesuai filter.</td>
+                  <td colSpan="6" className="p-8 text-center text-slate-400">Tidak ada data yang sesuai.</td>
                 </tr>
               ) : (
                 filteredInvoices.map((item, idx) => (
