@@ -88,17 +88,17 @@ function parseCSV(text, defaultYear) {
     h.replace(/^"|"$/g, "").trim().toLowerCase()
   );
 
-  const getIdx = (possibleNames) => {
-    return headers.findIndex((h) => possibleNames.some((p) => h.includes(p)));
+  const getIdx = (exactOrSub) => {
+    return headers.findIndex((h) => exactOrSub.some((p) => h === p || h.includes(p)));
   };
 
   const idxTahun = getIdx(["tahun"]);
-  const idxInv = getIdx(["nomor invoice", "no invoice", "no. invoice", "invoice"]);
-  const idxCust = getIdx(["nama customer", "customer", "pelanggan"]);
+  const idxInv = getIdx(["no invoice", "nomor invoice", "no. invoice"]);
+  const idxCust = getIdx(["nama customer", "customer"]);
   const idxSales = getIdx(["via", "sales"]);
   const idxBulan = getIdx(["month", "bulan"]);
-  const idxRev = getIdx(["nilai invoice", "total tagihan", "revenue"]);
-  const idxCash = getIdx(["dana masuk", "cash in", "total dana masuk"]);
+  const idxRev = getIdx(["nilai invoice", "revenue", "total tagihan"]);
+  const idxCash = getIdx(["dana masuk", "cash in"]);
   const idxSisa = getIdx(["sisa tagihan", "sisa"]);
   const idxStatus = getIdx(["status invoice", "status ar", "status"]);
 
@@ -148,7 +148,7 @@ const formatIDR = (val) => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("perbandingan");
+  const [activeTab, setActiveTab] = useState("kpi");
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -189,12 +189,12 @@ export default function App() {
       if (filterTahun !== "Semua tahun" && item.tahun !== filterTahun) return false;
       if (
         filterBulan !== "Semua bulan" &&
-        !item.bulan.toLowerCase().includes(filterBulan.toLowerCase())
+        !item.bulan.includes(filterBulan.toUpperCase())
       )
         return false;
       if (
         filterSales !== "Semua sales / VIA" &&
-        !item.sales.toLowerCase().includes(filterSales.toLowerCase())
+        !item.sales.includes(filterSales.toUpperCase())
       )
         return false;
 
@@ -220,10 +220,10 @@ export default function App() {
   const monthlyComparison = useMemo(() => {
     return MONTHS_ORDER.map((m) => {
       const data2025 = invoices.filter(
-        (x) => x.tahun === "2025" && x.bulan.includes(m) && (filterSales === "Semua sales / VIA" || x.sales.includes(filterSales))
+        (x) => x.tahun === "2025" && x.bulan.includes(m) && (filterSales === "Semua sales / VIA" || x.sales.includes(filterSales.toUpperCase()))
       );
       const data2026 = invoices.filter(
-        (x) => x.tahun === "2026" && x.bulan.includes(m) && (filterSales === "Semua sales / VIA" || x.sales.includes(filterSales))
+        (x) => x.tahun === "2026" && x.bulan.includes(m) && (filterSales === "Semua sales / VIA" || x.sales.includes(filterSales.toUpperCase()))
       );
 
       const rev2025 = data2025.reduce((a, b) => a + b.revenue, 0);
@@ -493,7 +493,7 @@ export default function App() {
             </>
           )}
 
-          {/* TAB 3: MASTER INVOICE & TAB LAINNYA YANG MEMBUTUHKAN TABEL */}
+          {/* TAB 3: MASTER INVOICE & TAB LAINNYA */}
           {(activeTab === "invoice" || activeTab === "outstanding2026" || activeTab === "cashinall" || activeTab === "jobid") && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 uppercase">
@@ -504,6 +504,7 @@ export default function App() {
                   <thead className="bg-[#0b0e14] text-slate-400 uppercase text-[10px]">
                     <tr>
                       <th className="p-3">Tahun</th>
+                      <th className="p-3">Bulan</th>
                       <th className="p-3">No Invoice</th>
                       <th className="p-3">Customer</th>
                       <th className="p-3">Sales</th>
@@ -518,6 +519,7 @@ export default function App() {
                       .map((inv, idx) => (
                         <tr key={idx} className="hover:bg-slate-800/30">
                           <td className="p-3 text-slate-400">{inv.tahun}</td>
+                          <td className="p-3 text-slate-400">{inv.bulan}</td>
                           <td className="p-3 text-blue-400 font-semibold">{inv.noInv || "-"}</td>
                           <td className="p-3">{inv.customer || "-"}</td>
                           <td className="p-3">{inv.sales || "-"}</td>
