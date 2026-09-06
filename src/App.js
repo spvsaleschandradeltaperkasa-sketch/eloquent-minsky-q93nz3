@@ -14,13 +14,9 @@ import {
   CheckSquare
 } from "lucide-react";
 
-// URL Google Sheets Utama
+// URL Google Sheets Utama (CSV Published)
 const ORIGINAL_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIRP841n/pub?gid=0&single=true&output=csv";
-
-// Fallback Proxy jika diblokir CORS oleh Browser
-const PROXY_URL =
-  "https://api.allorigins.win/raw?url=" + encodeURIComponent(ORIGINAL_URL);
 
 const MONTHS_ORDER = [
   "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
@@ -160,7 +156,7 @@ export default function App() {
   const [error, setError] = useState(null);
 
   const [filterTahun, setFilterTahun] = useState("2026");
-  const [filterBulan, setFilterBulan] = useState("Januari");
+  const [filterBulan, setFilterBulan] = useState("Semua bulan");
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
   const [searchInv, setSearchInv] = useState("");
@@ -169,25 +165,38 @@ export default function App() {
   const fetchData = async () => {
     setLoading(true);
     setError(null);
+
+    // Multi-proxy fallback jika URL langsung / proxy utama diblokir CORS
+    const urlsToTry = [
+      ORIGINAL_URL,
+      "https://corsproxy.io/?" + encodeURIComponent(ORIGINAL_URL),
+      "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(ORIGINAL_URL),
+      "https://api.allorigins.win/raw?url=" + encodeURIComponent(ORIGINAL_URL)
+    ];
+
     let resText = "";
-    try {
-      const r = await fetch(ORIGINAL_URL);
-      if (!r.ok) throw new Error("Fetch failed");
-      resText = await r.text();
-    } catch (e) {
+    let success = false;
+
+    for (const url of urlsToTry) {
       try {
-        const r2 = await fetch(PROXY_URL);
-        resText = await r2.text();
-      } catch (err2) {
-        setError("Gagal menarik data dari Google Sheets. Periksa koneksi/CORS.");
-        setLoading(false);
-        return;
+        const response = await fetch(url);
+        if (response.ok) {
+          resText = await response.text();
+          if (resText && resText.length > 50) {
+            success = true;
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn("Mencoba proxy berikutnya, gagal di:", url);
       }
     }
 
-    if (resText) {
+    if (success && resText) {
       const parsedData = parseMasterRekap(resText);
       setInvoices(parsedData);
+    } else {
+      setError("Gagal menarik data dari Google Sheets. Periksa koneksi/CORS.");
     }
     setLoading(false);
   };
@@ -321,7 +330,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
+      {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col overflow-y-auto">
         <header className="p-6 border-b border-slate-800 flex justify-between items-center bg-[#121722]/50">
           <div>
@@ -353,7 +362,7 @@ export default function App() {
             </div>
           )}
 
-          {/* FILTER DATA */}
+          {/* FILTER CONTROLS */}
           <div className="bg-[#121722] border border-slate-800 rounded-2xl p-4 space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -443,7 +452,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* METRICS OVERVIEW */}
+          {/* DASHBOARD SUMMARY & SALES CARDS */}
           {(activeTab === "dashboard" || activeTab === "kpi") && (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -471,7 +480,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SALES INDIVIDUAL CARDS */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                   PERFORMA SALES PERSON INDIVIDUAL
@@ -507,7 +515,7 @@ export default function App() {
             </>
           )}
 
-          {/* TAB: MASTER INVOICE & CASH IN ALL & OUTSTANDING */}
+          {/* MASTER INVOICE & OUTSTANDING & CASH IN ALL */}
           {(activeTab === "invoice" || activeTab === "outstanding" || activeTab === "cashinall") && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 uppercase">
@@ -564,7 +572,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: KONTRIBUSI REVENUE */}
+          {/* KONTRIBUSI REVENUE */}
           {activeTab === "kontribusi" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="text-sm font-bold text-white uppercase">KONTRIBUSI REVENUE PER SALES</h3>
@@ -588,7 +596,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: PERBANDINGAN REVENUE */}
+          {/* PERBANDINGAN REVENUE */}
           {activeTab === "perbandingan" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="text-sm font-bold text-white uppercase">PERBANDINGAN REVENUE 2025 VS 2026 PER BULAN</h3>
@@ -623,7 +631,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: JOB ID STATUS */}
+          {/* JOB ID STATUS */}
           {activeTab === "jobid" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-3">
               <h3 className="text-sm font-bold text-white uppercase">JOB ID STATUS</h3>
@@ -631,7 +639,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: TO DO LIST SPV */}
+          {/* TO DO LIST SPV */}
           {activeTab === "todolist" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-3">
               <h3 className="text-sm font-bold text-white uppercase">TO DO LIST SUPERVISOR</h3>
