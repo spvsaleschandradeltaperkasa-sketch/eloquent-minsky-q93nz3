@@ -14,9 +14,13 @@ import {
   CheckSquare
 } from "lucide-react";
 
-// Link Publish CSV dari sheet utama: REKAP INVOICE 23242526
-const REKAP_INVOICE_URL =
+// URL Google Sheets Utama
+const ORIGINAL_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIRP841n/pub?gid=0&single=true&output=csv";
+
+// Fallback Proxy jika diblokir CORS oleh Browser
+const PROXY_URL =
+  "https://api.allorigins.win/raw?url=" + encodeURIComponent(ORIGINAL_URL);
 
 const MONTHS_ORDER = [
   "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
@@ -156,7 +160,7 @@ export default function App() {
   const [error, setError] = useState(null);
 
   const [filterTahun, setFilterTahun] = useState("2026");
-  const [filterBulan, setFilterBulan] = useState("Semua bulan");
+  const [filterBulan, setFilterBulan] = useState("Januari");
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
   const [searchInv, setSearchInv] = useState("");
@@ -165,28 +169,39 @@ export default function App() {
   const fetchData = async () => {
     setLoading(true);
     setError(null);
+    let resText = "";
     try {
-      const res = await fetch(REKAP_INVOICE_URL).then((r) => r.text());
-      const parsedData = parseMasterRekap(res);
-      setInvoices(parsedData);
-    } catch (err) {
-      setError("Gagal menarik data dari Google Sheets.");
-    } finally {
-      setLoading(false);
+      const r = await fetch(ORIGINAL_URL);
+      if (!r.ok) throw new Error("Fetch failed");
+      resText = await r.text();
+    } catch (e) {
+      try {
+        const r2 = await fetch(PROXY_URL);
+        resText = await r2.text();
+      } catch (err2) {
+        setError("Gagal menarik data dari Google Sheets. Periksa koneksi/CORS.");
+        setLoading(false);
+        return;
+      }
     }
+
+    if (resText) {
+      const parsedData = parseMasterRekap(resText);
+      setInvoices(parsedData);
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Filter Utama Berdasarkan Sheet Rekap Invoice 23242526
   const filteredInvoices = useMemo(() => {
     return invoices.filter((item) => {
       if (filterTahun !== "Semua tahun" && item.tahun !== filterTahun) return false;
       if (
         filterBulan !== "Semua bulan" &&
-        !item.bulan.includes(filterBulan.toUpperCase())
+        !item.bulan.toUpperCase().includes(filterBulan.toUpperCase())
       )
         return false;
       if (
@@ -208,12 +223,10 @@ export default function App() {
     });
   }, [invoices, filterTahun, filterBulan, filterSales, filterStatus, searchInv, searchCust]);
 
-  // Aggregate Ringkasan
   const totalRevenue = useMemo(() => filteredInvoices.reduce((a, b) => a + b.revenue, 0), [filteredInvoices]);
   const totalDanaMasuk = useMemo(() => filteredInvoices.reduce((a, b) => a + b.danaMasuk, 0), [filteredInvoices]);
   const totalSisa = useMemo(() => filteredInvoices.reduce((a, b) => a + b.sisaTagihan, 0), [filteredInvoices]);
 
-  // Performa Per Sales Person
   const salesPerformance = useMemo(() => {
     return SALES_LIST.map((code) => {
       const items = filteredInvoices.filter((x) => x.sales.includes(code));
@@ -229,7 +242,6 @@ export default function App() {
     });
   }, [filteredInvoices]);
 
-  // Perbandingan 2025 vs 2026 per Bulan dari Rekap Data
   const monthlyComparison = useMemo(() => {
     return MONTHS_ORDER.map((m) => {
       const data2025 = invoices.filter(
@@ -576,7 +588,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: PERBANDINGAN REVENUE 2025 VS 2026 */}
+          {/* TAB: PERBANDINGAN REVENUE */}
           {activeTab === "perbandingan" && (
             <div className="bg-[#121722] border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="text-sm font-bold text-white uppercase">PERBANDINGAN REVENUE 2025 VS 2026 PER BULAN</h3>
