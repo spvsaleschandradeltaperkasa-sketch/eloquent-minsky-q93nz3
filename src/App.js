@@ -79,7 +79,22 @@ function parseMasterRekap(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return [];
 
-  const headers = parseCSVLine(lines[0]).map((h) =>
+  // Cari baris yang berisi header (mencari baris dengan kata 'invoice' / 'penyewa' / 'via')
+  let headerRowIndex = 0;
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const parsedRow = parseCSVLine(lines[i]).join(" ").toLowerCase();
+    if (
+      parsedRow.includes("invoice") ||
+      parsedRow.includes("penyewa") ||
+      parsedRow.includes("customer") ||
+      parsedRow.includes("via")
+    ) {
+      headerRowIndex = i;
+      break;
+    }
+  }
+
+  const headers = parseCSVLine(lines[headerRowIndex]).map((h) =>
     h.replace(/^"|"$/g, "").trim().toLowerCase()
   );
 
@@ -91,14 +106,14 @@ function parseMasterRekap(text) {
   const idxSales = getIdx(["via", "sales", "kode sales"]);
   const idxInv = getIdx(["no invoice", "nomor invoice", "no. invoice", "transaction number", "invoice"]);
   const idxCust = getIdx(["nama penyewa", "nama customer", "customer", "penyewa"]);
-  const idxRev = getIdx(["nilai invoice", "total invoice", "revenue"]);
-  const idxDanaMasuk = getIdx(["dana masuk", "pembayaran", "cash in"]);
+  const idxRev = getIdx(["nilai invoice", "total invoice", "revenue", "nilai"]);
+  const idxDanaMasuk = getIdx(["dana masuk", "pembayaran", "cash in", "masuk"]);
   const idxSisa = getIdx(["sisa tagihan", "sisa"]);
   const idxStatus = getIdx(["status invoice", "status"]);
   const idxMonth = getIdx(["month", "bulan"]);
 
   const data = [];
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = headerRowIndex + 1; i < lines.length; i++) {
     const row = parseCSVLine(lines[i]).map((cell) => cell.replace(/^"|"$/g, "").trim());
     if (row.length === 0) continue;
 
@@ -148,7 +163,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const [filterTahun, setFilterTahun] = useState("2026");
+  const [filterTahun, setFilterTahun] = useState("Semua tahun");
   const [filterBulan, setFilterBulan] = useState("Semua bulan");
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
@@ -159,50 +174,27 @@ export default function App() {
     setLoading(true);
     setError(null);
 
-    // ID Spreadsheet & GID tab REKAP INVOICE 23242526 dari URL kamu
     const sheetId = "112ySQuoyOwa41U88ufNSv2a2a29PpcuklKiPIZF6mZY";
     const gid = "1656309510";
 
-    const directCsvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
-    const pubCsvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=${gid}&single=true&output=csv`;
+    const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
 
-    const sources = [
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(directCsvUrl)}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(pubCsvUrl)}`,
-      `https://corsproxy.io/?${encodeURIComponent(directCsvUrl)}`
-    ];
-
-    let csvText = "";
-    let isSuccess = false;
-
-    for (const url of sources) {
-      try {
-        const response = await fetch(url);
-        if (response.ok) {
-          const text = await response.text();
-          if (text && text.length > 50 && (text.includes(",") || text.includes("\n"))) {
-            csvText = text;
-            isSuccess = true;
-            break;
-          }
-        }
-      } catch (e) {
-        console.warn("Retrying fetch source...", url);
+    try {
+      const response = await fetch(gvizUrl);
+      if (!response.ok) {
+        throw new Error("Gagal mengambil data dari Google Sheets.");
       }
-    }
-
-    if (isSuccess) {
-      const parsedData = parseMasterRekap(csvText);
-      if (parsedData.length > 0) {
+      const csvText = await response.text();
+      
+      if (csvText && csvText.length > 50) {
+        const parsedData = parseMasterRekap(csvText);
         setInvoices(parsedData);
       } else {
-        // Fallback jika header tidak terbaca sempurna
-        setInvoices([
-          { tahun: "2026", bulan: "MARET", sales: "ANS", noInv: "INV-001", customer: "ROBBY WIJOYO", revenue: 15000000, danaMasuk: 15000000, sisaTagihan: 0, status: "LUNAS" }
-        ]);
+        setError("Data Google Sheets kosong atau tab tidak ditemukan.");
       }
-    } else {
-      setError("Gagal menghubungkan ke Google Sheets. Pastikan akses file di-set 'Siapa saja yang memiliki link'.");
+    } catch (e) {
+      console.error(e);
+      setError("Gagal menghubungi Google Sheets.");
     }
 
     setLoading(false);
@@ -283,7 +275,7 @@ export default function App() {
   }, [invoices, filterSales]);
 
   const handleResetFilter = () => {
-    setFilterTahun("2026");
+    setFilterTahun("Semua tahun");
     setFilterBulan("Semua bulan");
     setFilterSales("Semua sales / VIA");
     setFilterStatus("Semua status");
