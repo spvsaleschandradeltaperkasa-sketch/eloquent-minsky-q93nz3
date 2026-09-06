@@ -176,12 +176,11 @@ export default function App() {
     const sheetId = "112ySQuoyOwa41U88ufNSv2a2a29PpcuklKiPIZF6mZY";
     const gid = "1656309510";
 
-    const rawGvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
-    // Menggunakan CORS Proxy untuk menembus batasan browser
-    const targetUrl = `https://corsproxy.io/?${encodeURIComponent(rawGvizUrl)}`;
+    // Direct Export URL tanpa proxy
+    const directUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
 
     try {
-      const response = await fetch(targetUrl);
+      const response = await fetch(directUrl);
       if (!response.ok) {
         throw new Error("Gagal mengambil data dari Google Sheets.");
       }
@@ -195,7 +194,7 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
-      setError("Gagal menghubungi Google Sheets. Periksa koneksi internet Anda.");
+      setError("Gagal menghubungi Google Sheets. Pastikan sheet sudah di-publish ke web.");
     }
 
     setLoading(false);
