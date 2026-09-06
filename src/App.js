@@ -1,305 +1,817 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  FileText, CheckCircle, Clock, 
-  Search, RefreshCw, DollarSign, Building, 
-  AlertCircle
-} from 'lucide-react';
+import React, { useState, useMemo, useEffect } from "react";
+import {
+  LayoutDashboard,
+  FileText,
+  Search,
+  RefreshCw,
+  RotateCcw,
+  Users,
+} from "lucide-react";
+
+const URL_2025 =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=181359356&single=true&output=csv";
+const URL_2026 =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
+
+const MONTHS_ORDER = [
+  "JANUARI",
+  "FEBRUARI",
+  "MARET",
+  "APRIL",
+  "MEI",
+  "JUNI",
+  "JULI",
+  "AGUSTUS",
+  "SEPTEMBER",
+  "OKTOBER",
+  "NOVEMBER",
+  "DESEMBER",
+];
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState("sales");
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  const [jenisFilter, setJenisFilter] = useState('ALL');
 
-  // Menggunakan link tab rekap spesifik yang stabil
-  const publishedCsvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYKXc-rzon8VqYa1SEYc_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYtvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
+  const [filterTahun, setFilterTahun] = useState("2026");
+  const [filterBulan, setFilterBulan] = useState("September");
+  const [filterNoInvoice, setFilterNoInvoice] = useState("");
+  const [filterCustomer, setFilterCustomer] = useState("");
+  const [filterSales, setFilterSales] = useState("Semua sales / VIA");
+  const [filterStatus, setFilterStatus] = useState("Semua status");
 
-  const parseCSVLine = (line) => {
-    const result = [];
-    let startValue = 0;
-    let inQuotes = false;
+  const getSalesTargets = (tahun, bulan) => {
+    let cdpRev = 2000000000;
+    let cdpCash = 2000000000;
 
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        let val = line.substring(startValue, i).trim();
-        if (val.startsWith('"') && val.endsWith('"')) {
-          val = val.substring(1, val.length - 1);
-        }
-        result.push(val.replace(/""/g, '"'));
-        startValue = i + 1;
+    if (tahun === "2026" && bulan !== "Semua bulan") {
+      const monthIndex = MONTHS_ORDER.indexOf(bulan.toUpperCase());
+      const sepIndex = MONTHS_ORDER.indexOf("SEPTEMBER");
+
+      if (monthIndex >= sepIndex) {
+        cdpRev = 4000000000;
+        cdpCash = 4000000000;
       }
     }
-    let lastVal = line.substring(startValue).trim();
-    if (lastVal.startsWith('"') && lastVal.endsWith('"')) {
-      lastVal = lastVal.substring(1, lastVal.length - 1);
+
+    return {
+      CDP: { revenue: cdpRev, cashIn: cdpCash },
+      ANS: {
+        revenue: 900000000,
+        cashIn: 800000000,
+        isCombined: true,
+        combinedWith: ["ANS", "FAN"],
+      },
+      FAN: {
+        revenue: 900000000,
+        cashIn: 800000000,
+        isCombined: true,
+        combinedWith: ["ANS", "FAN"],
+      },
+    };
+  };
+
+  const activeTargets = useMemo(() => {
+    return getSalesTargets(filterTahun, filterBulan);
+  }, [filterTahun, filterBulan]);
+
+  const parseCSV = (text, defaultYear) => {
+    const lines = text.split(/\r\n|\n/);
+    if (lines.length < 2) return [];
+
+    const result = [];
+    const parseLine = (str) => {
+      const arr = [];
+      let quote = false;
+      let col = "";
+      for (let c of str) {
+        if (c === '"') {
+          quote = !quote;
+        } else if (c === "," && !quote) {
+          arr.push(col.trim());
+          col = "";
+        } else {
+          col += c;
+        }
+      }
+      arr.push(col.trim());
+      return arr;
+    };
+
+    const cleanNum = (val) => {
+      if (!val) return 0;
+      let s = val.replace(/"/g, "").trim();
+      if (s === "-" || s === "") return 0;
+      if (s.includes(".")) {
+        s = s.replace(/\./g, "").replace(",", ".");
+      } else {
+        s = s.replace(",", ".");
+      }
+      return parseFloat(s) || 0;
+    };
+
+    const cleanStr = (val) => (val ? val.replace(/^"|"$/g, "").trim() : "");
+
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const cols = parseLine(lines[i]);
+
+      const colTahun = cleanStr(cols[0]);
+      const colVia = cleanStr(cols[1]);
+      const colVia2 = cleanStr(cols[23]);
+      const noInv = cleanStr(cols[3]);
+      const cust = cleanStr(cols[5]);
+      const colMonth = cleanStr(cols[21]);
+
+      if (!noInv && !cust) continue;
+
+      const thn = colTahun ? colTahun.replace(".0", "") : defaultYear;
+      const salesName = colVia2 || colVia || "-";
+
+      result.push({
+        id: `${defaultYear}-${i}`,
+        tahun: thn,
+        bulan: colMonth ? colMonth.toUpperCase() : "-",
+        via: salesName,
+        noInvoice: noInv || "-",
+        tanggal: cleanStr(cols[4]) || "-",
+        customer: cust || "Unspecified Customer",
+        nilaiInvoice: cleanNum(cols[10]),
+        danaMasuk: cleanNum(cols[13]),
+        sisaTagihan: cleanNum(cols[15]),
+        status: cleanStr(cols[16]) || "Belum ada Pembayaran",
+      });
     }
-    result.push(lastVal.replace(/""/g, '"'));
     return result;
   };
 
-  const parseMasterRekap = (csvText) => {
-    const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    if (lines.length < 2) return [];
-
-    const headers = parseCSVLine(lines[0]);
-    const parsedData = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const row = parseCSVLine(lines[i]);
-      if (row.length < 2) continue;
-
-      const obj = {};
-      headers.forEach((h, index) => {
-        obj[h.trim()] = row[index] || '';
-      });
-
-      const appsheetId = obj['Appsheet ID'] || `ROW-${i}`;
-      const timestamp = obj['Timestamp'] || '';
-      const transactionNumber = obj['Transaction Number'] || '';
-      const onJobOrNot = obj['On Job or Not'] || obj['On Job'] || '';
-      const jenisSewa = obj['Jenis Sewa'] || '';
-      const namaPenyewa = obj['Nama Penyewa'] || '';
-      const jenisPenyewa = obj['Jenis Penyewa'] || '';
-      const kodeUnit = obj['Kode Unit'] || '';
-
-      if (!timestamp && !namaPenyewa) continue;
-
-      let nilaiInvoice = 0;
-      Object.keys(obj).forEach(key => {
-        const val = obj[key];
-        if (key !== 'Transaction Number' && key !== 'Appsheet ID' && !isNaN(val) && val.length > 3) {
-          const num = parseFloat(val);
-          if (num > 1000 && nilaiInvoice === 0) {
-            nilaiInvoice = num;
-          }
-        }
-      });
-
-      parsedData.push({
-        id: appsheetId,
-        timestamp,
-        transactionNumber,
-        onJobOrNot,
-        jenisSewa,
-        namaPenyewa: namaPenyewa || 'Tanpa Nama',
-        jenisPenyewa,
-        kodeUnit,
-        nilaiInvoice
-      });
-    }
-
-    return parsedData;
-  };
-
-  const fetchData = async () => {
+  const fetchGoogleSheetsData = async () => {
     setLoading(true);
-    setError(null);
-
     try {
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(publishedCsvUrl)}`;
-      const response = await fetch(proxyUrl);
-      
-      if (!response.ok) throw new Error("Gagal mengambil data.");
-      
-      const data = await response.json();
-      const csvText = data.contents;
+      let combinedData = [];
 
-      if (csvText && csvText.length > 20) {
-        const parsedData = parseMasterRekap(csvText);
-        setInvoices(parsedData);
-      } else {
-        setError("Data kosong.");
+      if (URL_2025) {
+        const res2025 = await fetch(URL_2025);
+        const text2025 = await res2025.text();
+        const data2025 = parseCSV(text2025, "2025");
+        combinedData = [...combinedData, ...data2025];
       }
-    } catch (e) {
-      try {
-        const directRes = await fetch(publishedCsvUrl);
-        const directText = await directRes.text();
-        const parsedData = parseMasterRekap(directText);
-        setInvoices(parsedData);
-      } catch (err) {
-        setError("Gagal menghubungi Google Sheets. Pastikan sheet sudah dipublikasikan.");
+
+      if (URL_2026) {
+        const res2026 = await fetch(URL_2026);
+        const text2026 = await res2026.text();
+        const data2026 = parseCSV(text2026, "2026");
+        combinedData = [...combinedData, ...data2026];
       }
+
+      setInvoices(combinedData);
+    } catch (err) {
+      console.error("Gagal mengambil data:", err);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
-    fetchData();
+    fetchGoogleSheetsData();
   }, []);
 
-  const stats = useMemo(() => {
-    const totalData = invoices.length;
-    const totalNilai = invoices.reduce((acc, curr) => acc + (curr.nilaiInvoice || 0), 0);
-    const onJobCount = invoices.filter(item => item.onJobOrNot.toUpperCase().includes('ON JOB')).length;
-    const standbyCount = invoices.filter(item => item.onJobOrNot.toUpperCase().includes('STANDBY')).length;
+  const filteredData = useMemo(() => {
+    return invoices.filter((item) => {
+      const st = item.status ? item.status.toLowerCase().trim() : "";
+      const isLebih = st.includes("lebih") || item.sisaTagihan < 0;
+      const isLunas = st.includes("lunas") || (item.sisaTagihan === 0 && item.danaMasuk > 0);
 
-    return { totalData, totalNilai, onJobCount, standbyCount };
-  }, [invoices]);
+      if (filterTahun !== "Semua tahun" && item.tahun !== filterTahun)
+        return false;
+      if (
+        filterBulan !== "Semua bulan" &&
+        item.bulan !== filterBulan.toUpperCase()
+      )
+        return false;
+      if (
+        filterNoInvoice &&
+        !item.noInvoice.toLowerCase().includes(filterNoInvoice.toLowerCase())
+      )
+        return false;
+      if (
+        filterCustomer &&
+        !item.customer.toLowerCase().includes(filterCustomer.toLowerCase())
+      )
+        return false;
+      if (
+        filterSales !== "Semua sales / VIA" &&
+        item.via.toUpperCase() !== filterSales.toUpperCase()
+      )
+        return false;
 
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter(item => {
-      const matchSearch = 
-        item.namaPenyewa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.kodeUnit.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchStatus = statusFilter === 'ALL' || item.onJobOrNot.toUpperCase().includes(statusFilter);
-      const matchJenis = jenisFilter === 'ALL' || item.jenisPenyewa.toUpperCase().includes(jenisFilter);
-
-      return matchSearch && matchStatus && matchJenis;
+      // Logika Filter Status
+      if (filterStatus !== "Semua status") {
+        if (filterStatus === "Belum Lunas (Kurang Bayar & Belum Bayar)") {
+          if (isLunas || isLebih) return false;
+        } else if (filterStatus === "Lebih Bayar") {
+          if (!isLebih) return false;
+        } else if (filterStatus === "Lunas") {
+          if (!isLunas) return false;
+        } else if (filterStatus === "Kurang Bayar") {
+          if (!st.includes("kurang") && !(item.sisaTagihan > 0 && item.danaMasuk > 0)) return false;
+        } else if (filterStatus === "Belum ada Pembayaran") {
+          if (!st.includes("belum ada") && item.danaMasuk !== 0) return false;
+        }
+      }
+      return true;
     });
-  }, [invoices, searchTerm, statusFilter, jenisFilter]);
+  }, [
+    invoices,
+    filterTahun,
+    filterBulan,
+    filterNoInvoice,
+    filterCustomer,
+    filterSales,
+    filterStatus,
+  ]);
 
-  const formatRupiah = (angka) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(angka);
+  const combinedAnsFanData = useMemo(() => {
+    const ansFanInvoices = filteredData.filter((row) =>
+      ["ANS", "FAN"].includes(row.via.toUpperCase())
+    );
+    const revenue = ansFanInvoices.reduce(
+      (acc, curr) => acc + curr.nilaiInvoice,
+      0
+    );
+    const cashIn = ansFanInvoices.reduce(
+      (acc, curr) => acc + curr.danaMasuk,
+      0
+    );
+    return { revenue, cashIn };
+  }, [filteredData]);
+
+  const salesPerformanceData = useMemo(() => {
+    const map = {};
+    filteredData.forEach((row) => {
+      const sales = row.via || "Lainnya";
+      const st = row.status ? row.status.toLowerCase().trim() : "";
+      const isLebih = st.includes("lebih") || row.sisaTagihan < 0;
+      const isLunas = st.includes("lunas") || (row.sisaTagihan === 0 && row.danaMasuk > 0);
+
+      if (!map[sales]) {
+        map[sales] = {
+          sales,
+          totalRevenue: 0,
+          totalCashIn: 0,
+          totalSisaTagihan: 0,
+          lunasCount: 0,
+          outstandingCount: 0,
+          totalCount: 0,
+        };
+      }
+      map[sales].totalRevenue += row.nilaiInvoice;
+      map[sales].totalCashIn += row.danaMasuk;
+      map[sales].totalSisaTagihan += row.sisaTagihan;
+      map[sales].totalCount += 1;
+
+      if (isLunas || isLebih) {
+        map[sales].lunasCount += 1;
+      } else {
+        map[sales].outstandingCount += 1;
+      }
+    });
+    return Object.values(map).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [filteredData]);
+
+  const totalRevenue = useMemo(
+    () => filteredData.reduce((acc, curr) => acc + curr.nilaiInvoice, 0),
+    [filteredData]
+  );
+  const totalCashIn = useMemo(
+    () => filteredData.reduce((acc, curr) => acc + curr.danaMasuk, 0),
+    [filteredData]
+  );
+  const totalSisaTagihan = useMemo(
+    () => filteredData.reduce((acc, curr) => acc + curr.sisaTagihan, 0),
+    [filteredData]
+  );
+  const collectionRate =
+    totalRevenue > 0 ? ((totalCashIn / totalRevenue) * 100).toFixed(1) : "0.0";
+
+  const resetFilters = () => {
+    setFilterTahun("Semua tahun");
+    setFilterBulan("Semua bulan");
+    setFilterNoInvoice("");
+    setFilterCustomer("");
+    setFilterSales("Semua sales / VIA");
+    setFilterStatus("Semua status");
+  };
+
+  const formatRupiah = (val) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(val);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-800 pb-6">
+    <div className="flex min-h-screen bg-slate-900 font-sans text-slate-100 antialiased selection:bg-red-500 selection:text-white">
+      {/* Sidebar */}
+      <aside className="w-72 bg-slate-950/80 backdrop-blur-xl text-slate-300 flex flex-col justify-between p-5 shrink-0 border-r border-slate-800/80 shadow-2xl">
         <div>
-          <div className="flex items-center gap-2 text-blue-400 font-semibold text-sm mb-1">
-            <Building className="w-4 h-4" /> DELTA PERKASA RENTAL MANAGEMENT
+          <div className="flex items-center gap-3.5 px-3 py-4 mb-6 border-b border-slate-800/80">
+            <div className="h-11 w-11 bg-gradient-to-br from-red-600 to-red-700 text-white rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-red-600/30 font-black text-xl border border-red-500/50">
+              Δ
+            </div>
+            <div>
+              <div className="font-extrabold text-white text-xs tracking-wider uppercase leading-snug">
+                DASHBOARD MONITORING
+              </div>
+              <div className="text-[10px] text-red-400 font-semibold tracking-wider mt-0.5">
+                CV CHANDRA DELTA PERKASA
+              </div>
+            </div>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
-            Dashboard Rekap Invoice & Unit
-          </h1>
-        </div>
-        <button 
-          onClick={fetchData}
-          disabled={loading}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-lg shadow-blue-900/30 cursor-pointer"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Menyinkronkan...' : 'Sync Google Sheets'}
-        </button>
-      </div>
 
-      {error && (
-        <div className="bg-red-950/50 border border-red-800 text-red-200 p-4 rounded-xl mb-6 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
-          <p className="text-sm">{error}</p>
-        </div>
-      )}
+          <nav className="space-y-1.5">
+            <button
+              onClick={() => setActiveTab("overview")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                activeTab === "overview"
+                  ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-600/25 border border-red-500/30"
+                  : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Overview</span>
+            </button>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl">
-          <div className="flex justify-between items-center text-slate-400 mb-2">
-            <span className="text-sm font-medium">Total Record</span>
-            <FileText className="w-5 h-5 text-blue-400" />
-          </div>
-          <div className="text-2xl font-bold text-white">{stats.totalData}</div>
-        </div>
-        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl">
-          <div className="flex justify-between items-center text-slate-400 mb-2">
-            <span className="text-sm font-medium">Unit On Job</span>
-            <CheckCircle className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div className="text-2xl font-bold text-emerald-400">{stats.onJobCount}</div>
-        </div>
-        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl">
-          <div className="flex justify-between items-center text-slate-400 mb-2">
-            <span className="text-sm font-medium">Unit Standby</span>
-            <Clock className="w-5 h-5 text-amber-400" />
-          </div>
-          <div className="text-2xl font-bold text-amber-400">{stats.standbyCount}</div>
-        </div>
-        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl">
-          <div className="flex justify-between items-center text-slate-400 mb-2">
-            <span className="text-sm font-medium">Estimasi Nilai Total</span>
-            <DollarSign className="w-5 h-5 text-purple-400" />
-          </div>
-          <div className="text-xl font-bold text-white truncate">{formatRupiah(stats.totalNilai)}</div>
-        </div>
-      </div>
+            <button
+              onClick={() => setActiveTab("sales")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                activeTab === "sales"
+                  ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-600/25 border border-red-500/30"
+                  : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Sales Performance</span>
+            </button>
 
-      <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-2xl mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Cari nama penyewa atau kode unit..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
-          />
+            <button
+              onClick={() => setActiveTab("master")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                activeTab === "master"
+                  ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-600/25 border border-red-500/30"
+                  : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Master Invoice</span>
+            </button>
+          </nav>
         </div>
-        <div className="flex gap-3 w-full md:w-auto">
-          <select 
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300"
+
+        <div className="pt-4 border-t border-slate-800/80 text-[10px] text-slate-500 text-center font-medium">
+          Secure Live Data Engine v3.0
+        </div>
+      </aside>
+
+      <main className="flex-1 p-8 overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div>
+            <div className="text-[11px] font-bold text-red-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+              LIVE SPREADSHEETS SYNC (2025 & 2026)
+            </div>
+            <h1 className="text-2xl font-black text-white tracking-tight">
+              REVENUE & CASH IN PERFORMANCE
+            </h1>
+          </div>
+
+          <button
+            onClick={fetchGoogleSheetsData}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-600/20 border border-blue-400/30 active:scale-95"
           >
-            <option value="ALL">Semua Status</option>
-            <option value="ON JOB">ON JOB</option>
-            <option value="STANDBY">STANDBY</option>
-          </select>
-          <select 
-            value={jenisFilter}
-            onChange={(e) => setJenisFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300"
-          >
-            <option value="ALL">Semua Jenis Penyewa</option>
-            <option value="SWASTA">SWASTA</option>
-            <option value="PRIBADI">PRIBADI</option>
-            <option value="BUMN">BUMN</option>
-          </select>
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            <span>{loading ? "Syncing Data..." : "Sync Google Sheets"}</span>
+          </button>
         </div>
-      </div>
 
-      <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/90 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                <th className="p-4">Timestamp</th>
-                <th className="p-4">Nama Penyewa</th>
-                <th className="p-4">Jenis Sewa</th>
-                <th className="p-4">Status</th>
-                <th className="p-4">Kode Unit</th>
-                <th className="p-4 text-right">Nilai / Nominal</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 text-sm">
-              {loading && invoices.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-400">Memuat semua data rekap...</td>
-                </tr>
-              ) : filteredInvoices.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-400">Tidak ada data yang sesuai.</td>
-                </tr>
-              ) : (
-                filteredInvoices.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-slate-800/40 transition">
-                    <td className="p-4 text-slate-400 text-xs">{item.timestamp}</td>
-                    <td className="p-4 font-medium text-white">{item.namaPenyewa}</td>
-                    <td className="p-4 text-slate-300">{item.jenisSewa || '-'}</td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                        item.onJobOrNot.toUpperCase().includes('ON JOB') 
-                          ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50' 
-                          : 'bg-amber-950/80 text-amber-400 border border-amber-800/50'
-                      }`}>
-                        {item.onJobOrNot || 'STANDBY'}
-                      </span>
-                    </td>
-                    <td className="p-4 font-mono text-xs text-blue-300">{item.kodeUnit || '-'}</td>
-                    <td className="p-4 text-right font-medium text-white">
-                      {item.nilaiInvoice > 0 ? formatRupiah(item.nilaiInvoice) : '-'}
-                    </td>
+        {/* Global Filter */}
+        <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 tracking-wider uppercase">
+              <Search className="w-3.5 h-3.5 text-red-500" />
+              <span>
+                Filter Data (Target CDP otomatis menyesuaikan bulan & tahun)
+              </span>
+            </div>
+            <button
+              onClick={resetFilters}
+              className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 font-semibold transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Reset Filter
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <select
+              value={filterTahun}
+              onChange={(e) => setFilterTahun(e.target.value)}
+              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
+            >
+              <option>Semua tahun</option>
+              <option>2026</option>
+              <option>2025</option>
+              <option>2024</option>
+              <option>2023</option>
+            </select>
+
+            <select
+              value={filterBulan}
+              onChange={(e) => setFilterBulan(e.target.value)}
+              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
+            >
+              <option>Semua bulan</option>
+              <option>Januari</option>
+              <option>Februari</option>
+              <option>Maret</option>
+              <option>April</option>
+              <option>Mei</option>
+              <option>Juni</option>
+              <option>Juli</option>
+              <option>Agustus</option>
+              <option>September</option>
+              <option>Oktober</option>
+              <option>November</option>
+              <option>Desember</option>
+            </select>
+
+            <input
+              type="text"
+              placeholder="Cari nomor invoice"
+              value={filterNoInvoice}
+              onChange={(e) => setFilterNoInvoice(e.target.value)}
+              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 placeholder:text-slate-500 transition-colors"
+            />
+            <input
+              type="text"
+              placeholder="Cari customer"
+              value={filterCustomer}
+              onChange={(e) => setFilterCustomer(e.target.value)}
+              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 placeholder:text-slate-500 transition-colors"
+            />
+
+            <select
+              value={filterSales}
+              onChange={(e) => setFilterSales(e.target.value)}
+              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
+            >
+              <option>Semua sales / VIA</option>
+              <option>ANS</option>
+              <option>CDF</option>
+              <option>CDP</option>
+              <option>FAN</option>
+              <option>SPL</option>
+              <option>TPM</option>
+              <option>UCI</option>
+            </select>
+
+            {/* Dropdown Status Lengkap dengan Opsi Lebih Bayar */}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
+            >
+              <option>Semua status</option>
+              <option>Lunas</option>
+              <option>Lebih Bayar</option>
+              <option>Kurang Bayar</option>
+              <option>Belum ada Pembayaran</option>
+              <option>Belum Lunas (Kurang Bayar & Belum Bayar)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Dynamic KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-blue-500 border border-slate-800 p-5 shadow-xl">
+            <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
+              TOTAL REVENUE
+            </div>
+            <div className="text-xl font-black text-white">
+              {formatRupiah(totalRevenue)}
+            </div>
+          </div>
+
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-emerald-500 border border-slate-800 p-5 shadow-xl">
+            <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
+              CASH IN
+            </div>
+            <div className="text-xl font-black text-white">
+              {formatRupiah(totalCashIn)}
+            </div>
+            <div className="text-[11px] font-semibold text-emerald-400 mt-1">
+              {collectionRate}% collection rate
+            </div>
+          </div>
+
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-red-500 border border-slate-800 p-5 shadow-xl">
+            <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
+              SISA TAGIHAN
+            </div>
+            <div className="text-xl font-black text-white">
+              {formatRupiah(totalSisaTagihan)}
+            </div>
+          </div>
+
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-indigo-500 border border-slate-800 p-5 shadow-xl">
+            <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
+              JUMLAH INVOICE
+            </div>
+            <div className="text-xl font-black text-white">
+              {filteredData.length}
+            </div>
+          </div>
+        </div>
+
+        {/* TAB CONTENT: SALES PERFORMANCE */}
+        {activeTab === "sales" && (
+          <div className="space-y-6">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Performa Sales Person Individual
+                </h2>
+                <span className="text-xs text-slate-400 font-semibold">
+                  Total Sales: {salesPerformanceData.length}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {salesPerformanceData.map((item) => {
+                  const salesKey = item.sales.toUpperCase();
+                  const targetConfig = activeTargets[salesKey];
+
+                  const hasTarget = Boolean(targetConfig);
+                  const isCombined = targetConfig?.isCombined || false;
+
+                  const revActual = isCombined
+                    ? combinedAnsFanData.revenue
+                    : item.totalRevenue;
+                  const cashInActual = isCombined
+                    ? combinedAnsFanData.cashIn
+                    : item.totalCashIn;
+
+                  const targetRev = targetConfig ? targetConfig.revenue : 0;
+                  const targetCashIn = targetConfig ? targetConfig.cashIn : 0;
+
+                  const revPct =
+                    targetRev > 0
+                      ? ((revActual / targetRev) * 100).toFixed(1)
+                      : 0;
+                  const cashInPct =
+                    targetCashIn > 0
+                      ? ((cashInActual / targetCashIn) * 100).toFixed(1)
+                      : 0;
+
+                  return (
+                    <div
+                      key={item.sales}
+                      className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5 hover:border-slate-700 transition-all"
+                    >
+                      <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-800/80">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-extrabold rounded-xl flex items-center justify-center text-xs shadow-md border border-blue-400/30">
+                            {item.sales}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h3 className="font-bold text-white text-sm">
+                                {item.sales}
+                              </h3>
+                              {isCombined && (
+                                <span className="bg-red-500/10 text-red-400 border border-red-500/20 text-[9px] font-bold px-2 py-0.5 rounded-full">
+                                  Gabungan (ANS+FAN)
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {item.totalCount} Invoices
+                            </span>
+                          </div>
+                        </div>
+
+                        {hasTarget ? (
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                              revPct >= 100
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                            }`}
+                          >
+                            {revPct}% Rev
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                            Tanpa Target
+                          </span>
+                        )}
+                      </div>
+
+                      {hasTarget ? (
+                        <div className="space-y-3 mb-4">
+                          <div className="bg-blue-950/30 rounded-xl p-3 border border-blue-900/40">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-bold text-blue-400 uppercase">
+                                REVENUE (Target: {formatRupiah(targetRev)})
+                              </span>
+                              <span className="text-xs font-extrabold text-blue-300">
+                                {revPct}%
+                              </span>
+                            </div>
+                            <div className="text-sm font-black text-white">
+                              {formatRupiah(item.totalRevenue)}
+                            </div>
+                            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                              <div
+                                className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(revPct, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-emerald-950/30 rounded-xl p-3 border border-emerald-900/40">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-bold text-emerald-400 uppercase">
+                                CASH IN (Target: {formatRupiah(targetCashIn)})
+                              </span>
+                              <span className="text-xs font-extrabold text-emerald-300">
+                                {cashInPct}%
+                              </span>
+                            </div>
+                            <div className="text-sm font-black text-white">
+                              {formatRupiah(item.totalCashIn)}
+                            </div>
+                            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                              <div
+                                className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                                style={{
+                                  width: `${Math.min(cashInPct, 100)}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5 mb-4">
+                          <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase">
+                              TOTAL REVENUE ACTUAL
+                            </div>
+                            <div className="text-sm font-extrabold text-white mt-0.5">
+                              {formatRupiah(item.totalRevenue)}
+                            </div>
+                          </div>
+                          <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase">
+                              TOTAL CASH IN ACTUAL
+                            </div>
+                            <div className="text-sm font-extrabold text-white mt-0.5">
+                              {formatRupiah(item.totalCashIn)}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="bg-emerald-950/20 border border-emerald-900/30 rounded-xl p-2.5 text-center">
+                          <span className="block text-[9px] font-bold text-emerald-400 uppercase">
+                            Lunas / Lebih Bayar
+                          </span>
+                          <span className="font-bold text-white text-xs">
+                            {item.lunasCount} Inv
+                          </span>
+                        </div>
+                        <div className="bg-red-950/20 border border-red-900/30 rounded-xl p-2.5 text-center">
+                          <span className="block text-[9px] font-bold text-red-400 uppercase">
+                            Outstanding
+                          </span>
+                          <span className="font-bold text-white text-xs">
+                            {item.outstandingCount} Inv
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB MASTER INVOICE */}
+        {(activeTab === "overview" || activeTab === "master") && (
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+            <div className="p-4 border-b border-slate-800/80 font-bold text-xs text-white uppercase tracking-wider flex justify-between items-center">
+              <span>
+                Daftar Master Invoice Gabungan ({filteredData.length})
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                    <th className="p-3.5">Tahun</th>
+                    <th className="p-3.5">No. Invoice</th>
+                    <th className="p-3.5">Tanggal</th>
+                    <th className="p-3.5">Bulan</th>
+                    <th className="p-3.5">Customer</th>
+                    <th className="p-3.5">VIA / Sales</th>
+                    <th className="p-3.5 text-right">Nilai Invoice</th>
+                    <th className="p-3.5 text-right">Dana Masuk</th>
+                    <th className="p-3.5 text-right">Sisa Tagihan</th>
+                    <th className="p-3.5">Status</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-medium">
+                  {filteredData.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan="10"
+                        className="p-8 text-center text-slate-500 text-xs"
+                      >
+                        {loading
+                          ? "Sedang memuat data..."
+                          : "Tidak ada data invoice yang sesuai."}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredData.map((row) => {
+                      const st = row.status ? row.status.toLowerCase().trim() : "";
+                      const isLebih = st.includes("lebih") || row.sisaTagihan < 0;
+                      const isLunas = st.includes("lunas") || (row.sisaTagihan === 0 && row.danaMasuk > 0);
+                      const isKurang = st.includes("kurang") || (row.sisaTagihan > 0 && row.danaMasuk > 0);
+
+                      let badgeStyle = "bg-red-500/10 text-red-400 border-red-500/20";
+                      if (isLebih) {
+                        badgeStyle = "bg-cyan-500/20 text-cyan-300 border-cyan-500/40";
+                      } else if (isLunas) {
+                        badgeStyle = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                      } else if (isKurang) {
+                        badgeStyle = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+                      }
+
+                      return (
+                        <tr
+                          key={row.id}
+                          className="hover:bg-slate-900/40 transition-colors"
+                        >
+                          <td className="p-3.5 font-bold text-slate-300">
+                            {row.tahun}
+                          </td>
+                          <td className="p-3.5 font-semibold text-white">
+                            {row.noInvoice}
+                          </td>
+                          <td className="p-3.5 text-slate-400">{row.tanggal}</td>
+                          <td className="p-3.5 text-slate-300 font-semibold">
+                            {row.bulan}
+                          </td>
+                          <td className="p-3.5 text-slate-200">{row.customer}</td>
+                          <td className="p-3.5 text-red-400 font-bold">
+                            {row.via}
+                          </td>
+                          <td className="p-3.5 text-right font-semibold text-white">
+                            {formatRupiah(row.nilaiInvoice)}
+                          </td>
+                          <td className="p-3.5 text-right font-semibold text-emerald-400">
+                            {formatRupiah(row.danaMasuk)}
+                          </td>
+                          <td
+                            className={`p-3.5 text-right font-semibold ${
+                              row.sisaTagihan <= 0
+                                ? "text-emerald-400"
+                                : "text-red-400"
+                            }`}
+                          >
+                            {formatRupiah(row.sisaTagihan)}
+                          </td>
+                          <td className="p-3.5">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${badgeStyle}`}
+                            >
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
