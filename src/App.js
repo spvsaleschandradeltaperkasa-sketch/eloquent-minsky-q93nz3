@@ -14,9 +14,9 @@ import {
   CheckSquare
 } from "lucide-react";
 
-// URL Google Sheets Utama (CSV Published)
-const ORIGINAL_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIRP841n/pub?gid=0&single=true&output=csv";
+// Link Google Sheets CSV Utama
+const SHEET_ID = "2PACX-1vTo9EJbez7MyWx1yKXc-rzoN8vqYa1SEyc_ffe0bmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIRP841n";
+const ORIGINAL_URL = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?gid=0&single=true&output=csv`;
 
 const MONTHS_ORDER = [
   "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
@@ -166,12 +166,13 @@ export default function App() {
     setLoading(true);
     setError(null);
 
-    // Multi-proxy fallback jika URL langsung / proxy utama diblokir CORS
+    // Multi-proxy fallback strategy
     const urlsToTry = [
-      ORIGINAL_URL,
-      "https://corsproxy.io/?" + encodeURIComponent(ORIGINAL_URL),
-      "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(ORIGINAL_URL),
-      "https://api.allorigins.win/raw?url=" + encodeURIComponent(ORIGINAL_URL)
+      "/api/fetch-sheets",
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(ORIGINAL_URL)}`,
+      `https://corsproxy.io/?${encodeURIComponent(ORIGINAL_URL)}`,
+      `https://thingproxy.freeboard.io/fetch/${ORIGINAL_URL}`,
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(ORIGINAL_URL)}`
     ];
 
     let resText = "";
@@ -182,21 +183,25 @@ export default function App() {
         const response = await fetch(url);
         if (response.ok) {
           resText = await response.text();
-          if (resText && resText.length > 50) {
+          if (resText && resText.length > 50 && !resText.includes("<!DOCTYPE html>")) {
             success = true;
             break;
           }
         }
       } catch (e) {
-        console.warn("Mencoba proxy berikutnya, gagal di:", url);
+        console.warn("Gagal di URL:", url);
       }
     }
 
     if (success && resText) {
       const parsedData = parseMasterRekap(resText);
-      setInvoices(parsedData);
+      if (parsedData.length > 0) {
+        setInvoices(parsedData);
+      } else {
+        setError("Data berhasil ditarik, namun format kolom CSV tidak sesuai.");
+      }
     } else {
-      setError("Gagal menarik data dari Google Sheets. Periksa koneksi/CORS.");
+      setError("Gagal menarik data dari Google Sheets. Periksa publikasi CSV atau koneksi.");
     }
     setLoading(false);
   };
@@ -476,7 +481,7 @@ export default function App() {
 
                 <div className="bg-[#121722] border border-purple-500/30 rounded-2xl p-5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">JUMLAH INVOICE</span>
-                  <p className="text-2xl font-bold text-white mt-2">{filteredInvoices.length}</p>
+                  <p className="2xl font-bold text-white mt-2">{filteredInvoices.length}</p>
                 </div>
               </div>
 
