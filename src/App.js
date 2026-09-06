@@ -79,7 +79,6 @@ function parseMasterRekap(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return [];
 
-  // Cari baris yang berisi header (mencari baris dengan kata 'invoice' / 'penyewa' / 'via')
   let headerRowIndex = 0;
   for (let i = 0; i < Math.min(lines.length, 10); i++) {
     const parsedRow = parseCSVLine(lines[i]).join(" ").toLowerCase();
@@ -177,10 +176,12 @@ export default function App() {
     const sheetId = "112ySQuoyOwa41U88ufNSv2a2a29PpcuklKiPIZF6mZY";
     const gid = "1656309510";
 
-    const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
+    const rawGvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
+    // Menggunakan CORS Proxy untuk menembus batasan browser
+    const targetUrl = `https://corsproxy.io/?${encodeURIComponent(rawGvizUrl)}`;
 
     try {
-      const response = await fetch(gvizUrl);
+      const response = await fetch(targetUrl);
       if (!response.ok) {
         throw new Error("Gagal mengambil data dari Google Sheets.");
       }
@@ -194,7 +195,7 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
-      setError("Gagal menghubungi Google Sheets.");
+      setError("Gagal menghubungi Google Sheets. Periksa koneksi internet Anda.");
     }
 
     setLoading(false);
