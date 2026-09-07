@@ -20,31 +20,31 @@ export default function App() {
   };
 
   return (
-    <div className="revenue-card" style={{ padding: '20px', background: '#0b0f19', color: '#fff', fontFamily: 'sans-serif' }}>
-      <div className="revenue-header" style={{ marginBottom: '15px', fontWeight: 'bold' }}>
+    <div className="revenue-card" style={{ padding: '20px', background: '#0b0f19', color: '#fff', fontFamily: 'sans-serif', maxWidth: '800px', margin: '0 auto' }}>
+      <div className="revenue-header" style={{ marginBottom: '20px', fontWeight: 'bold', fontSize: '16px' }}>
         KONTRIBUSI REVENUE 2026 (% DARI TOTAL)
       </div>
       
       <div className="revenue-list">
         {revenueData.map((item, index) => (
-          <div key={index} style={{ marginBottom: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span>{item.label}</span>
-              {/* Format diubah: Rupiah di depan, Persentase di dalam kurung di belakang */}
+          <div key={index} style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <span style={{ fontWeight: 'bold' }}>{item.label}</span>
               <span>{formatRupiah(item.revenue)} ({item.persen}%)</span>
             </div>
-            <div style={{ background: '#1e293b', borderRadius: '4px', height: '8px', width: '100%' }}>
-              <div style={{ background: '#ef4444', height: '100%', width: `${item.persen}%`, borderRadius: '4px' }}></div>
+            {/* Progress bar background */}
+            <div style={{ background: '#1e293b', borderRadius: '4px', height: '6px', width: '100%', overflow: 'hidden' }}>
+              {/* Progress bar fill diubah menjadi warna BIRU */}
+              <div style={{ background: '#3b82f6', height: '100%', width: `${item.persen}%`, borderRadius: '4px' }}></div>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px solid #334155', paddingTop: '10px' }}>
+      <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px solid #334155', paddingTop: '12px', fontSize: '16px' }}>
         <span>Total 2026:</span>
         <span>{formatRupiah(totalRevenue)}</span>
       </div>
     </div>
   );
 }
-
