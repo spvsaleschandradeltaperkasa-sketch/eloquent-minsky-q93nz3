@@ -9,7 +9,6 @@ import {
   Lock,
   LogOut,
   UserCheck,
-  PieChart,
 } from "lucide-react";
 
 const URL_2025 =
@@ -32,6 +31,9 @@ const MONTHS_ORDER = [
   "DESEMBER",
 ];
 
+// ==========================================
+// DATA USER & PASSWORD (DAPAT DITAMBAHKAN DI SINI)
+// ==========================================
 const ALLOWED_USERS = [
   { username: "admin", password: "123", role: "Administrator" },
   { username: "delta", password: "delta2026", role: "Management" },
@@ -39,6 +41,7 @@ const ALLOWED_USERS = [
 ];
 
 export default function App() {
+  // State Autentikasi / Login
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState("");
   const [inputUser, setInputUser] = useState("");
@@ -50,7 +53,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   const [filterTahun, setFilterTahun] = useState("2026");
-  const [filterBulan, setFilterBulan] = useState("Semua bulan");
+  const [filterBulan, setFilterBulan] = useState("September");
   const [filterNoInvoice, setFilterNoInvoice] = useState("");
   const [filterCustomer, setFilterCustomer] = useState("");
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
@@ -319,34 +322,6 @@ export default function App() {
     return Object.values(map).sort((a, b) => b.totalRevenue - a.totalRevenue);
   }, [filteredData]);
 
-  // Data khusus untuk tabel Kontribusi Revenue 2026 (berdasarkan seluruh data tahun 2026 yang ada tanpa terpengaruh filter samping/tabel lain)
-  const contributionTableData = useMemo(() => {
-    const data2026Only = invoices.filter((item) => item.tahun === "2026");
-    const map = {};
-    let totalRev2026 = 0;
-
-    data2026Only.forEach((row) => {
-      const sales = row.via || "Lainnya";
-      if (!map[sales]) {
-        map[sales] = 0;
-      }
-      map[sales] += row.nilaiInvoice;
-      totalRev2026 += row.nilaiInvoice;
-    });
-
-    const result = Object.keys(map).map((sales) => {
-      const rev = map[sales];
-      const kontribusi = totalRev2026 > 0 ? (rev / totalRev2026) * 100 : 0;
-      return { sales, revenue: rev, kontribusi };
-    });
-
-    return result.sort((a, b) => b.revenue - a.revenue);
-  }, [invoices]);
-
-  const totalRevenue2026Sum = useMemo(() => {
-    return contributionTableData.reduce((acc, curr) => acc + curr.revenue, 0);
-  }, [contributionTableData]);
-
   const totalRevenue = useMemo(
     () => filteredData.reduce((acc, curr) => acc + curr.nilaiInvoice, 0),
     [filteredData]
@@ -363,7 +338,7 @@ export default function App() {
     totalRevenue > 0 ? ((totalCashIn / totalRevenue) * 100).toFixed(1) : "0.0";
 
   const resetFilters = () => {
-    setFilterTahun("2026");
+    setFilterTahun("Semua tahun");
     setFilterBulan("Semua bulan");
     setFilterNoInvoice("");
     setFilterCustomer("");
@@ -379,6 +354,9 @@ export default function App() {
     }).format(val);
   };
 
+  // ==========================================
+  // JIKA BELUM LOGIN, TAMPILKAN FORM LOGIN
+  // ==========================================
   if (!isLoggedIn) {
     return (
       <div className="flex min-h-screen bg-slate-950 items-center justify-center p-4 font-sans text-slate-100 antialiased selection:bg-red-500 selection:text-white">
@@ -457,6 +435,9 @@ export default function App() {
     );
   }
 
+  // ==========================================
+  // JIKA SUDAH LOGIN, TAMPILKAN DASHBOARD UTAMA
+  // ==========================================
   return (
     <div className="flex min-h-screen bg-slate-900 font-sans text-slate-100 antialiased selection:bg-red-500 selection:text-white">
       {/* Sidebar */}
@@ -529,7 +510,7 @@ export default function App() {
             </button>
           </div>
           <div className="text-[10px] text-slate-600 text-center font-medium">
-            Secure Live Data Engine v3.1
+            Secure Live Data Engine v3.0
           </div>
         </div>
       </aside>
@@ -693,12 +674,11 @@ export default function App() {
           </div>
         </div>
 
-        {/* TAB CONTENT: SALES PERFORMANCE & KONTRIBUSI REVENUE 2026 */}
+        {/* TAB CONTENT: SALES PERFORMANCE */}
         {activeTab === "sales" && (
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-            {/* Bagian Kiri: Performa Sales Person Individual (Lebar 8 Kolom) */}
-            <div className="xl:col-span-8 space-y-6">
-              <div className="flex items-center justify-between mb-2">
+          <div className="space-y-6">
+            <div>
+              <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-bold text-white uppercase tracking-wider">
                   Performa Sales Person Individual
                 </h2>
@@ -707,7 +687,7 @@ export default function App() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {salesPerformanceData.map((item) => {
                   const salesKey = item.sales.toUpperCase();
                   const targetConfig = activeTargets[salesKey];
@@ -864,67 +844,6 @@ export default function App() {
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* Bagian Kanan: Tabel Kontribusi Revenue 2026 (Lebar 4 Kolom) */}
-            <div className="xl:col-span-4 space-y-6">
-              <div className="bg-slate-950/80 backdrop-blur-xl rounded-2xl border border-slate-800 shadow-2xl overflow-hidden sticky top-6">
-                <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 border-b border-blue-600/50">
-                  <div className="flex items-center gap-2 text-white font-extrabold text-xs uppercase tracking-wider">
-                    <PieChart className="w-4 h-4 text-blue-200" />
-                    <span>KONTRIBUSI REVENUE 2026</span>
-                  </div>
-                  <div className="text-[10px] text-blue-200 font-medium mt-0.5">
-                    Analisis persentase kontribusi per sales person tahun 2026
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-                        <th className="p-3">SALES</th>
-                        <th className="p-3 text-right">Revenue 2026</th>
-                        <th className="p-3 text-right">Kontribusi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-medium">
-                      {contributionTableData.length === 0 ? (
-                        <tr>
-                          <td colSpan="3" className="p-6 text-center text-slate-500 text-xs">
-                            {loading ? "Memuat data 2026..." : "Tidak ada data 2026."}
-                          </td>
-                        </tr>
-                      ) : (
-                        contributionTableData.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-slate-900/40 transition-colors">
-                            <td className="p-3">
-                              <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 font-bold text-[10px] border border-slate-700">
-                                {row.sales}
-                              </span>
-                            </td>
-                            <td className="p-3 text-right font-semibold text-slate-200">
-                              {formatRupiah(row.revenue)}
-                            </td>
-                            <td className="p-3 text-right font-black text-blue-400">
-                              {row.kontribusi.toFixed(2)}%
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                    {contributionTableData.length > 0 && (
-                      <tfoot>
-                        <tr className="bg-slate-900/90 border-t border-slate-800 font-bold text-white text-xs">
-                          <td className="p-3 uppercase">Total</td>
-                          <td className="p-3 text-right">{formatRupiah(totalRevenue2026Sum)}</td>
-                          <td className="p-3 text-right text-emerald-400">100.00%</td>
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
-                </div>
               </div>
             </div>
           </div>
