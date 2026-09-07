@@ -15,7 +15,7 @@ export default function App({ data = [] }) {
   const handleLogin = (e) => {
     e.preventDefault();
     // Atur username dan password default di sini (bisa Anda ubah sesuai keinginan)
-    if (username === 'admin' && password === 'delta123') {
+    if (username === 'delta' && password === 'delta123') {
       setIsLoggedIn(true);
       setLoginError('');
     } else {
