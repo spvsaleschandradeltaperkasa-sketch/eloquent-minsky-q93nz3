@@ -6,6 +6,9 @@ import {
   RefreshCw,
   RotateCcw,
   Users,
+  Lock,
+  LogOut,
+  UserCheck,
 } from "lucide-react";
 
 const URL_2025 =
@@ -28,7 +31,23 @@ const MONTHS_ORDER = [
   "DESEMBER",
 ];
 
+// ==========================================
+// DATA USER & PASSWORD (DAPAT DITAMBAHKAN DI SINI)
+// ==========================================
+const ALLOWED_USERS = [
+  { username: "admin", password: "123", role: "Administrator" },
+  { username: "delta", password: "delta2026", role: "Management" },
+  { username: "sales", password: "sales123", role: "Sales Team" },
+];
+
 export default function App() {
+  // State Autentikasi / Login
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState("");
+  const [inputUser, setInputUser] = useState("");
+  const [inputPass, setInputPass] = useState("");
+  const [loginError, setLoginError] = useState("");
+
   const [activeTab, setActiveTab] = useState("sales");
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -39,6 +58,29 @@ export default function App() {
   const [filterCustomer, setFilterCustomer] = useState("");
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    setLoginError("");
+
+    const found = ALLOWED_USERS.find(
+      (u) => u.username === inputUser.trim() && u.password === inputPass.trim()
+    );
+
+    if (found) {
+      setIsLoggedIn(true);
+      setCurrentUser(found.username);
+    } else {
+      setLoginError("Username atau Password salah!");
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setInputUser("");
+    setInputPass("");
+    setCurrentUser("");
+  };
 
   const getSalesTargets = (tahun, bulan) => {
     let cdpRev = 2000000000;
@@ -173,8 +215,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchGoogleSheetsData();
-  }, []);
+    if (isLoggedIn) {
+      fetchGoogleSheetsData();
+    }
+  }, [isLoggedIn]);
 
   const filteredData = useMemo(() => {
     return invoices.filter((item) => {
@@ -205,7 +249,6 @@ export default function App() {
       )
         return false;
 
-      // Logika Filter Status
       if (filterStatus !== "Semua status") {
         if (filterStatus === "Belum Lunas (Kurang Bayar & Belum Bayar)") {
           if (isLunas || isLebih) return false;
@@ -311,6 +354,90 @@ export default function App() {
     }).format(val);
   };
 
+  // ==========================================
+  // JIKA BELUM LOGIN, TAMPILKAN FORM LOGIN
+  // ==========================================
+  if (!isLoggedIn) {
+    return (
+      <div className="flex min-h-screen bg-slate-950 items-center justify-center p-4 font-sans text-slate-100 antialiased selection:bg-red-500 selection:text-white">
+        <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl shadow-red-950/20">
+          <div className="flex flex-col items-center text-center mb-8">
+            <div className="h-16 w-16 bg-gradient-to-br from-red-600 to-red-700 text-white rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-red-600/30 font-black text-3xl border border-red-500/50">
+              Δ
+            </div>
+            <h1 className="text-xl font-black text-white tracking-wider uppercase">
+              CV CHANDRA DELTA PERKASA
+            </h1>
+            <p className="text-xs text-slate-400 font-medium mt-1">
+              Silakan login untuk mengakses Dashboard Monitoring
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Username
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <UserCheck className="w-4 h-4" />
+                </span>
+                <input
+                  type="text"
+                  required
+                  placeholder="Masukkan username..."
+                  value={inputUser}
+                  onChange={(e) => setInputUser(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Password
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <Lock className="w-4 h-4" />
+                </span>
+                <input
+                  type="password"
+                  required
+                  placeholder="Masukkan password..."
+                  value={inputPass}
+                  onChange={(e) => setInputPass(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            {loginError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold rounded-xl text-center">
+                {loginError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full py-3.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-red-600/30 border border-red-500/40 active:scale-95 mt-2"
+            >
+              Masuk Dashboard
+            </button>
+          </form>
+
+          <div className="mt-8 pt-4 border-t border-slate-800/80 text-[10px] text-slate-500 text-center font-medium">
+            Info Login Bawaan:<br />
+            <span className="text-slate-400">admin / 123</span> | <span className="text-slate-400">delta / delta2026</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // JIKA SUDAH LOGIN, TAMPILKAN DASHBOARD UTAMA
+  // ==========================================
   return (
     <div className="flex min-h-screen bg-slate-900 font-sans text-slate-100 antialiased selection:bg-red-500 selection:text-white">
       {/* Sidebar */}
@@ -369,8 +496,22 @@ export default function App() {
           </nav>
         </div>
 
-        <div className="pt-4 border-t border-slate-800/80 text-[10px] text-slate-500 text-center font-medium">
-          Secure Live Data Engine v3.0
+        <div className="pt-4 border-t border-slate-800/80 space-y-3">
+          <div className="flex items-center justify-between px-2">
+            <div className="text-[11px] text-slate-400 font-medium truncate">
+              User: <span className="text-white font-bold">{currentUser}</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-red-400 hover:text-red-300 text-xs flex items-center gap-1 font-semibold transition-colors"
+              title="Keluar Akun"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Logout
+            </button>
+          </div>
+          <div className="text-[10px] text-slate-600 text-center font-medium">
+            Secure Live Data Engine v3.0
+          </div>
         </div>
       </aside>
 
@@ -476,7 +617,6 @@ export default function App() {
               <option>UCI</option>
             </select>
 
-            {/* Dropdown Status Lengkap dengan Opsi Lebih Bayar */}
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
@@ -766,33 +906,25 @@ export default function App() {
                           key={row.id}
                           className="hover:bg-slate-900/40 transition-colors"
                         >
-                          <td className="p-3.5 font-bold text-slate-300">
-                            {row.tahun}
-                          </td>
-                          <td className="p-3.5 font-semibold text-white">
+                          <td className="p-3.5 text-slate-300">{row.tahun}</td>
+                          <td className="p-3.5 font-bold text-white">
                             {row.noInvoice}
                           </td>
-                          <td className="p-3.5 text-slate-400">{row.tanggal}</td>
-                          <td className="p-3.5 text-slate-300 font-semibold">
-                            {row.bulan}
-                          </td>
+                          <td className="p-3.5 text-slate-300">{row.tanggal}</td>
+                          <td className="p-3.5 text-slate-300">{row.bulan}</td>
                           <td className="p-3.5 text-slate-200">{row.customer}</td>
-                          <td className="p-3.5 text-red-400 font-bold">
-                            {row.via}
+                          <td className="p-3.5">
+                            <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 font-bold text-[10px] border border-slate-700">
+                              {row.via}
+                            </span>
                           </td>
-                          <td className="p-3.5 text-right font-semibold text-white">
+                          <td className="p-3.5 text-right font-semibold text-slate-200">
                             {formatRupiah(row.nilaiInvoice)}
                           </td>
                           <td className="p-3.5 text-right font-semibold text-emerald-400">
                             {formatRupiah(row.danaMasuk)}
                           </td>
-                          <td
-                            className={`p-3.5 text-right font-semibold ${
-                              row.sisaTagihan <= 0
-                                ? "text-emerald-400"
-                                : "text-red-400"
-                            }`}
-                          >
+                          <td className="p-3.5 text-right font-semibold text-red-400">
                             {formatRupiah(row.sisaTagihan)}
                           </td>
                           <td className="p-3.5">
