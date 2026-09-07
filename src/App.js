@@ -13,12 +13,15 @@ import {
   Clock,
   AlertTriangle,
   TrendingUp,
+  Briefcase,
 } from "lucide-react";
 
 const URL_2025 =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=181359356&single=true&output=csv";
 const URL_2026 =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
+const URL_JOB_ID =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=181359356&single=true&output=csv"; // Ganti URL GID Job ID jika ada link khusus, atau biarkan sinkron
 
 const MONTHS_ORDER = [
   "JANUARI",
@@ -50,6 +53,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState("sales");
   const [invoices, setInvoices] = useState([]);
+  const [jobIdData, setJobIdData] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const [filterTahun, setFilterTahun] = useState("2026");
@@ -58,6 +62,7 @@ export default function App() {
   const [filterCustomer, setFilterCustomer] = useState("");
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
+  const [filterJobSearch, setFilterJobSearch] = useState("");
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -215,6 +220,50 @@ export default function App() {
     return result;
   };
 
+  const parseJobIdCSV = (text) => {
+    const lines = text.split(/\r\n|\n/);
+    if (lines.length < 2) return [];
+    const result = [];
+    const parseLine = (str) => {
+      const arr = [];
+      let quote = false;
+      let col = "";
+      for (let c of str) {
+        if (c === '"') {
+          quote = !quote;
+        } else if (c === "," && !quote) {
+          arr.push(col.trim());
+          col = "";
+        } else {
+          col += c;
+        }
+      }
+      arr.push(col.trim());
+      return arr;
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const cols = parseLine(lines[i]);
+      const cleanStr = (val) => (val ? val.replace(/^"|"$/g, "").trim() : "");
+      
+      const jobIdVal = cleanStr(cols[6]) || cleanStr(cols[0]) || "-";
+      const customerVal = cleanStr(cols[5]) || cleanStr(cols[4]) || "-";
+      const unitVal = cleanStr(cols[1]) || "-";
+      const statusVal = cleanStr(cols[16]) || "Aktif";
+
+      result.push({
+        id: `job-${i}`,
+        jobId: jobIdVal,
+        customer: customerVal,
+        unit: unitVal,
+        status: statusVal,
+        rawRow: cols.join(" | ")
+      });
+    }
+    return result;
+  };
+
   const fetchGoogleSheetsData = async () => {
     setLoading(true);
     try {
@@ -235,6 +284,13 @@ export default function App() {
       }
 
       setInvoices(combinedData);
+
+      if (URL_JOB_ID) {
+        const resJob = await fetch(URL_JOB_ID);
+        const textJob = await resJob.text();
+        const parsedJob = parseJobIdCSV(textJob);
+        setJobIdData(parsedJob);
+      }
     } catch (err) {
       console.error("Gagal mengambil data:", err);
     } finally {
@@ -301,6 +357,16 @@ export default function App() {
     filterSales,
     filterStatus,
   ]);
+
+  const filteredJobIdData = useMemo(() => {
+    if (!filterJobSearch) return jobIdData;
+    return jobIdData.filter(
+      (j) =>
+        j.jobId.toLowerCase().includes(filterJobSearch.toLowerCase()) ||
+        j.customer.toLowerCase().includes(filterJobSearch.toLowerCase()) ||
+        j.unit.toLowerCase().includes(filterJobSearch.toLowerCase())
+    );
+  }, [jobIdData, filterJobSearch]);
 
   const combinedAnsFanData = useMemo(() => {
     const ansFanInvoices = filteredData.filter((row) =>
@@ -400,7 +466,6 @@ export default function App() {
     return { current, aging31_60, aging60_120, agingCritical120 };
   }, [filteredData]);
 
-  // Kalkulasi Tren Bulanan (Monthly Trend) Berdasarkan Tahun yang Dipilih
   const monthlyTrendData = useMemo(() => {
     const targetYear = filterTahun === "Semua tahun" ? "2026" : filterTahun;
     const map = {};
@@ -449,6 +514,7 @@ export default function App() {
     setFilterCustomer("");
     setFilterSales("Semua sales / VIA");
     setFilterStatus("Semua status");
+    setFilterJobSearch("");
   };
 
   const formatRupiah = (val) => {
@@ -615,6 +681,19 @@ export default function App() {
             >
               <FileText className="w-4 h-4" />
               <span>Master Invoice</span>
+            </button>
+
+            {/* Menu Baru: Job ID */}
+            <button
+              onClick={() => setActiveTab("jobid")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                activeTab === "jobid"
+                  ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-600/25 border border-red-500/30"
+                  : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Briefcase className="w-4 h-4" />
+              <span>Job ID</span>
             </button>
           </nav>
         </div>
@@ -836,133 +915,76 @@ export default function App() {
 
                   const revPct =
                     targetRev > 0
-                      ? ((revActual / targetRev) * 100).toFixed(1)
+                      ? Math.min(100, Math.round((revActual / targetRev) * 100))
                       : 0;
-                  const cashInPct =
+                  const cashPct =
                     targetCashIn > 0
-                      ? ((cashInActual / targetCashIn) * 100).toFixed(1)
+                      ? Math.min(100, Math.round((cashInActual / targetCashIn) * 100))
                       : 0;
 
                   return (
                     <div
                       key={item.sales}
-                      className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5 hover:border-slate-700 transition-all"
+                      className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl flex flex-col justify-between"
                     >
-                      <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-800/80">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-extrabold rounded-xl flex items-center justify-center text-xs shadow-md border border-blue-400/30">
-                            {item.sales}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <h3 className="font-bold text-white text-sm">
-                                {item.sales}
-                              </h3>
-                              {isCombined && (
-                                <span className="bg-red-500/10 text-red-400 border border-red-500/20 text-[9px] font-bold px-2 py-0.5 rounded-full">
-                                  Gabungan (ANS+FAN)
-                                </span>
-                              )}
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-400 font-black text-xs">
+                              {item.sales.substring(0, 2).toUpperCase()}
                             </div>
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              {item.totalCount} Invoices
-                            </span>
+                            <div>
+                              <h3 className="font-bold text-white text-sm">
+                                {item.sales} {isCombined && "(ANS & FAN)"}
+                              </h3>
+                              <p className="text-[10px] text-slate-400 font-medium">
+                                {item.totalCount} Total Invoice Tercatat
+                              </p>
+                            </div>
                           </div>
-                        </div>
-
-                        {hasTarget ? (
                           <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                              revPct >= 100
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
+                              item.lunasCount > 0
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                             }`}
                           >
-                            {revPct}% Rev
+                            {item.lunasCount} Lunas / {item.outstandingCount} Pending
                           </span>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
-                            Tanpa Target
-                          </span>
-                        )}
+                        </div>
+
+                        <div className="space-y-3 mb-4">
+                          <div className="bg-slate-900/80 rounded-xl p-3 border border-slate-800/80">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-slate-400 font-medium">Revenue Aktual:</span>
+                              <span className="text-white font-bold">{formatRupiah(revActual)}</span>
+                            </div>
+                            {hasTarget && (
+                              <div className="flex justify-between text-[10px] text-slate-500">
+                                <span>Target: {formatRupiah(targetRev)}</span>
+                                <span className="text-red-400 font-bold">{revPct}%</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="bg-slate-900/80 rounded-xl p-3 border border-slate-800/80">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-slate-400 font-medium">Cash In Aktual:</span>
+                              <span className="text-emerald-400 font-bold">{formatRupiah(cashInActual)}</span>
+                            </div>
+                            {hasTarget && (
+                              <div className="flex justify-between text-[10px] text-slate-500">
+                                <span>Target: {formatRupiah(targetCashIn)}</span>
+                                <span className="text-emerald-400 font-bold">{cashPct}%</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
-                      {hasTarget ? (
-                        <div className="space-y-3 mb-4">
-                          <div className="bg-blue-950/30 rounded-xl p-3 border border-blue-900/40">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-[10px] font-bold text-blue-400 uppercase">
-                                REVENUE (Target: {formatRupiah(targetRev)})
-                              </span>
-                              <span className="text-xs font-extrabold text-blue-300">
-                                {revPct}%
-                              </span>
-                            </div>
-                            <div className="text-sm font-black text-white">
-                              {formatRupiah(revActual)}
-                            </div>
-                            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                              <div
-                                className="bg-blue-500 h-full rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(revPct, 100)}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="bg-emerald-950/30 rounded-xl p-3 border border-emerald-900/40">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-[10px] font-bold text-emerald-400 uppercase">
-                                CASH IN (Target: {formatRupiah(targetCashIn)})
-                              </span>
-                              <span className="text-xs font-extrabold text-emerald-300">
-                                {cashInPct}%
-                              </span>
-                            </div>
-                            <div className="text-sm font-black text-white">
-                              {formatRupiah(cashInActual)}
-                            </div>
-                            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                              <div
-                                className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(cashInPct, 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-3 mb-4">
-                          <div className="bg-slate-900/50 rounded-xl p-3 border border-slate-800">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-                              TOTAL REVENUE
-                            </div>
-                            <div className="text-sm font-black text-white">
-                              {formatRupiah(item.totalRevenue)}
-                            </div>
-                          </div>
-                          <div className="bg-slate-900/50 rounded-xl p-3 border border-slate-800">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-                              CASH IN
-                            </div>
-                            <div className="text-sm font-black text-white">
-                              {formatRupiah(item.totalCashIn)}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-800/80 text-[11px]">
-                        <div>
-                          <span className="text-slate-400">Sisa Tagihan:</span>
-                          <div className="font-bold text-red-400 truncate">
-                            {formatRupiah(item.totalSisaTagihan)}
-                          </div>
-                        </div>
-                        <div>
-                          <span className="text-slate-400">Status Nota:</span>
-                          <div className="font-bold text-slate-200">
-                            {item.lunasCount} Lunas / {item.outstandingCount} Belum
-                          </div>
-                        </div>
+                      <div className="text-[10px] text-slate-500 font-medium pt-2 border-t border-slate-800/80 flex justify-between">
+                        <span>Sisa Tagihan:</span>
+                        <span className="text-red-400 font-bold">{formatRupiah(item.totalSisaTagihan)}</span>
                       </div>
                     </div>
                   );
@@ -971,228 +993,166 @@ export default function App() {
             </div>
 
             <div className="xl:col-span-4 space-y-6">
-              <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5">
-                <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-slate-800/80">
-                  <div className="h-8 w-8 bg-red-600/20 text-red-400 rounded-lg flex items-center justify-center font-bold border border-red-500/30">
-                    <PieChart className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-white text-xs uppercase tracking-wider">
-                      Kontribusi Revenue 2026
-                    </h3>
-                    <p className="text-[10px] text-slate-400">
-                      Persentase kontribusi per sales (Tahun 2026)
-                    </p>
-                  </div>
+              <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <PieChart className="w-4 h-4 text-red-500" />
+                  <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Kontribusi Revenue 2026 (% dari Total)
+                  </h2>
                 </div>
 
-                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                  {contributionTableData.map((row, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-slate-900/70 border border-slate-800/80 rounded-xl p-3.5 hover:border-slate-700 transition-all"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="h-6 w-6 bg-slate-800 text-slate-300 rounded-lg flex items-center justify-center text-[10px] font-bold border border-slate-700">
-                            {idx + 1}
-                          </span>
-                          <span className="font-extrabold text-white text-xs">
-                            {row.sales}
-                          </span>
+                <div className="space-y-3">
+                  {contributionTableData.map((row) => {
+                    const percentage = row.kontribusi.toFixed(1);
+                    return (
+                      <div key={row.sales} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="font-bold text-slate-300">{row.sales}</span>
+                          <span className="text-red-400 font-semibold">{percentage}% ({formatRupiah(row.revenue)})</span>
                         </div>
-                        <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                          {row.kontribusi.toFixed(1)}%
-                        </span>
+                        <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
+                          <div
+                            className="bg-gradient-to-r from-red-600 to-red-500 h-full rounded-full transition-all duration-500"
+                            style={{ width: `${Math.min(100, row.kontribusi)}%` }}
+                          ></div>
+                        </div>
                       </div>
-
-                      <div className="flex items-center justify-between text-[11px] mb-2">
-                        <span className="text-slate-400">Revenue:</span>
-                        <span className="font-bold text-slate-200">
-                          {formatRupiah(row.revenue)}
-                        </span>
-                      </div>
-
-                      <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-800">
-                        <div
-                          className="bg-gradient-to-r from-red-600 to-red-500 h-full rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min(row.kontribusi, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-bold">
-                  <span className="text-slate-400 uppercase">Total Revenue 2026:</span>
-                  <span className="text-white">
-                    {formatRupiah(totalRevenue2026Sum)}
-                  </span>
+                <div className="mt-5 pt-4 border-t border-slate-800 flex justify-between items-center text-xs">
+                  <span className="text-slate-400 font-medium">Total 2026:</span>
+                  <span className="text-white font-bold">{formatRupiah(totalRevenue2026Sum)}</span>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB CONTENT: GRAFIK TREN BULANAN (MONTHLY TREND) */}
-        {activeTab === "trend" && (
+        {/* TAB CONTENT: OVERVIEW */}
+        {activeTab === "overview" && (
           <div className="space-y-6">
-            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 mb-6 border-b border-slate-800 gap-4">
-                <div>
-                  <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-red-500" />
-                    Grafik Tren Bulanan (Monthly Trend) - Tahun {filterTahun === "Semua tahun" ? "2026 (Default)" : filterTahun}
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Membandingkan pergerakan Revenue vs Cash In untuk menganalisis pola musim proyek (seasonal trend) sewa alat berat.
-                  </p>
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-4">
+                Ringkasan Eksekutif CV Chandra Delta Perkasa
+              </h2>
+              <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                Dashboard ini menampilkan data real-time dari Google Sheets untuk tahun 2025 dan 2026. Anda dapat memonitor performa penagihan (Cash In), pendapatan total (Revenue), serta piutang yang melewati batas waktu (Aging &gt; 60 dan &gt; 120 Hari) di seluruh wilayah operasional Makassar dan Sulawesi.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+                <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase mb-1">Total Invoice Tersaring</div>
+                  <div className="text-lg font-black text-white">{filteredData.length} Dokumen</div>
                 </div>
-                <div className="flex items-center gap-4 text-xs font-semibold">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
-                    <span className="text-slate-300">Revenue</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
-                    <span className="text-slate-300">Cash In</span>
-                  </div>
+                <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase mb-1">Rasio Kolektibilitas</div>
+                  <div className="text-lg font-black text-emerald-400">{collectionRate}%</div>
+                </div>
+                <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase mb-1">Total Piutang Kritis</div>
+                  <div className="text-lg font-black text-red-400">{formatRupiah(agingSummary.agingCritical120)}</div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
 
-              {/* Tampilan Visual Grafik Bar/Line Interaktif CSS */}
-              <div className="space-y-4 pt-2">
-                <div className="grid grid-cols-12 gap-2 text-center text-[10px] font-bold text-slate-400 uppercase border-b border-slate-800 pb-2">
-                  <div className="col-span-2 text-left">Bulan</div>
-                  <div className="col-span-5">Revenue</div>
-                  <div className="col-span-5">Cash In</div>
-                </div>
+        {/* TAB CONTENT: GRAFIK TREN BULANAN */}
+        {activeTab === "trend" && (
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                Grafik Tren Bulanan ({filterTahun === "Semua tahun" ? "2026 (Default)" : filterTahun})
+              </h2>
+              <span className="text-xs text-slate-400 font-semibold">Perbandingan Revenue vs Cash In</span>
+            </div>
 
-                {monthlyTrendData.data.map((item, idx) => {
-                  const revPct = Math.min((item.revenue / monthlyTrendData.maxVal) * 100, 100);
-                  const cashPct = Math.min((item.cashIn / monthlyTrendData.maxVal) * 100, 100);
-
-                  return (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-center py-2 border-b border-slate-800/40 hover:bg-slate-900/40 rounded-lg px-2 transition-colors">
-                      <div className="col-span-2 text-xs font-extrabold text-white">
-                        {item.bulan}
-                      </div>
-
-                      <div className="col-span-5 space-y-1">
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-blue-400 font-bold">{formatRupiah(item.revenue)}</span>
-                        </div>
-                        <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
-                          <div
-                            className="bg-blue-500 h-full rounded-full transition-all duration-500"
-                            style={{ width: `${revPct}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="col-span-5 space-y-1">
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-emerald-400 font-bold">{formatRupiah(item.cashIn)}</span>
-                        </div>
-                        <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
-                          <div
-                            className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                            style={{ width: `${cashPct}%` }}
-                          />
-                        </div>
+            <div className="space-y-4 pt-4">
+              {monthlyTrendData.data.map((item) => {
+                const revWidth = (item.revenue / monthlyTrendData.maxVal) * 100;
+                const cashWidth = (item.cashIn / monthlyTrendData.maxVal) * 100;
+                return (
+                  <div key={item.bulan} className="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80 space-y-2">
+                    <div className="flex justify-between text-xs font-bold text-slate-200">
+                      <span>{item.bulan}</span>
+                      <div className="flex gap-4 text-[11px]">
+                        <span className="text-blue-400">Rev: {formatRupiah(item.revenue)}</span>
+                        <span className="text-emerald-400">Cash: {formatRupiah(item.cashIn)}</span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="space-y-1.5">
+                      <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden">
+                        <div className="bg-blue-600 h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(100, revWidth)}%` }}></div>
+                      </div>
+                      <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden">
+                        <div className="bg-emerald-500 h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(100, cashWidth)}%` }}></div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
         {/* TAB CONTENT: AGING PIUTANG */}
         {activeTab === "aging" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
-                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">0 - 30 Hari (Lancar)</div>
-                <div className="text-lg font-black text-white">{formatRupiah(agingSummary.current)}</div>
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                Analisis Aging Piutang (&gt;60 &amp; &gt;120 Hari)
+              </h2>
+              <span className="text-xs text-amber-400 font-semibold">Fokus Pemulihan Kas</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                <div className="text-[11px] text-slate-400 font-bold uppercase mb-1">0 - 30 Hari (Lancar)</div>
+                <div className="text-lg font-black text-emerald-400">{formatRupiah(agingSummary.current)}</div>
               </div>
-              <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
-                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">31 - 60 Hari</div>
+              <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                <div className="text-[11px] text-slate-400 font-bold uppercase mb-1">31 - 60 Hari</div>
                 <div className="text-lg font-black text-blue-400">{formatRupiah(agingSummary.aging31_60)}</div>
               </div>
-              <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
-                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">60 - 120 Hari (Perhatian)</div>
+              <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                <div className="text-[11px] text-slate-400 font-bold uppercase mb-1">61 - 120 Hari</div>
                 <div className="text-lg font-black text-amber-400">{formatRupiah(agingSummary.aging60_120)}</div>
               </div>
-              <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-red-500/30 shadow-xl">
-                <div className="text-[10px] font-bold text-red-400 uppercase mb-1">&gt; 120 Hari (Kritis / Macet)</div>
-                <div className="text-lg font-black text-red-400">{formatRupiah(agingSummary.agingCritical120)}</div>
+              <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 border-l-4 border-l-red-500">
+                <div className="text-[11px] text-red-400 font-bold uppercase mb-1">&gt; 120 Hari (Kritis)</div>
+                <div className="text-lg font-black text-red-500">{formatRupiah(agingSummary.agingCritical120)}</div>
               </div>
             </div>
 
-            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-              <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-500" />
-                  Daftar Invoice Piutang Belum Lunas &amp; Aging Tertinggi
-                </h2>
-              </div>
+            <div className="pt-4">
+              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">Daftar Invoice Piutang Berumur &gt; 60 Hari</h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-                      <th className="p-3.5">No Invoice</th>
-                      <th className="p-3.5">Customer</th>
-                      <th className="p-3.5">Sales</th>
-                      <th className="p-3.5">Sisa Tagihan</th>
-                      <th className="p-3.5">Estimasi Umur (Hari)</th>
-                      <th className="p-3.5">Kategori Aging</th>
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-900 text-slate-400 uppercase font-bold border-b border-slate-800">
+                    <tr>
+                      <th className="px-4 py-3">No Invoice</th>
+                      <th className="px-4 py-3">Customer</th>
+                      <th className="px-4 py-3">Sales/VIA</th>
+                      <th className="px-4 py-3">Sisa Tagihan</th>
+                      <th className="px-4 py-3">Umur (Hari)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                    {filteredData.filter(i => i.sisaTagihan > 0).length === 0 ? (
+                  <tbody>
+                    {filteredData.filter(item => item.sisaTagihan > 0 && item.agingDays > 60).length === 0 ? (
                       <tr>
-                        <td colSpan="6" className="p-6 text-center text-slate-500 text-xs">
-                          Tidak ada data sisa tagihan piutang.
-                        </td>
+                        <td colSpan="5" className="px-4 py-6 text-center text-slate-500">Tidak ada piutang di atas 60 hari pada filter ini.</td>
                       </tr>
                     ) : (
-                      filteredData
-                        .filter(i => i.sisaTagihan > 0)
-                        .sort((a, b) => b.agingDays - a.agingDays)
-                        .map((row) => (
-                          <tr key={row.id} className="hover:bg-slate-900/40 transition-colors">
-                            <td className="p-3.5 font-bold text-white">{row.noInvoice}</td>
-                            <td className="p-3.5 font-medium text-slate-200">{row.customer}</td>
-                            <td className="p-3.5">
-                              <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-700">
-                                {row.via}
-                              </span>
-                            </td>
-                            <td className="p-3.5 font-semibold text-red-400">{formatRupiah(row.sisaTagihan)}</td>
-                            <td className="p-3.5 font-bold text-slate-200">{row.agingDays} Hari</td>
-                            <td className="p-3.5">
-                              {row.agingDays > 120 ? (
-                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-                                  &gt; 120 Hari (Kritis)
-                                </span>
-                              ) : row.agingDays > 60 ? (
-                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                  60 - 120 Hari
-                                </span>
-                              ) : row.agingDays > 30 ? (
-                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                  31 - 60 Hari
-                                </span>
-                              ) : (
-                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                  0 - 30 Hari (Lancar)
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
+                      filteredData.filter(item => item.sisaTagihan > 0 && item.agingDays > 60).map(item => (
+                        <tr key={item.id} className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                          <td className="px-4 py-3 font-semibold text-white">{item.noInvoice}</td>
+                          <td className="px-4 py-3">{item.customer}</td>
+                          <td className="px-4 py-3">{item.via}</td>
+                          <td className="px-4 py-3 font-bold text-red-400">{formatRupiah(item.sisaTagihan)}</td>
+                          <td className="px-4 py-3"><span className="px-2 py-0.5 bg-red-500/10 text-red-400 rounded-md font-bold">{item.agingDays} Hari</span></td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -1201,64 +1161,116 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === "overview" && (
-          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-8 text-center">
-            <h2 className="text-lg font-bold text-white mb-2">
-              Overview Dashboard Monitoring
-            </h2>
-            <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Gunakan tab <span className="text-white font-semibold">Sales Performance</span> untuk memantau pencapaian target, <span className="text-white font-semibold">Grafik Tren Bulanan</span> untuk melihat pola musim proyek, <span className="text-white font-semibold">Aging Piutang</span> untuk memantau piutang macet, atau <span className="text-white font-semibold">Master Invoice</span> untuk melihat detail data keseluruhan.
-            </p>
+        {/* TAB CONTENT: MASTER INVOICE */}
+        {activeTab === "master" && (
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                Master Data Invoice (Total: {filteredData.length})
+              </h2>
+              <span className="text-xs text-slate-400 font-semibold">Live Google Sheets Synchronized</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-900 text-slate-400 uppercase font-bold border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-3">Tahun/Bulan</th>
+                    <th className="px-4 py-3">No Invoice</th>
+                    <th className="px-4 py-3">Customer</th>
+                    <th className="px-4 py-3">Sales/VIA</th>
+                    <th className="px-4 py-3">Nilai Invoice</th>
+                    <th className="px-4 py-3">Dana Masuk</th>
+                    <th className="px-4 py-3">Sisa Tagihan</th>
+                    <th className="px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredData.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="px-4 py-8 text-center text-slate-500">Tidak ada data invoice yang sesuai dengan filter.</td>
+                    </tr>
+                  ) : (
+                    filteredData.map((item) => (
+                      <tr key={item.id} className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                        <td className="px-4 py-3 font-semibold text-slate-400">{item.tahun} - {item.bulan}</td>
+                        <td className="px-4 py-3 font-bold text-white">{item.noInvoice}</td>
+                        <td className="px-4 py-3">{item.customer}</td>
+                        <td className="px-4 py-3 font-semibold text-red-400">{item.via}</td>
+                        <td className="px-4 py-3">{formatRupiah(item.nilaiInvoice)}</td>
+                        <td className="px-4 py-3 text-emerald-400">{formatRupiah(item.danaMasuk)}</td>
+                        <td className="px-4 py-3 text-red-400 font-bold">{formatRupiah(item.sisaTagihan)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
+                            item.status.toLowerCase().includes("lunas")
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              : "bg-red-500/10 text-red-400 border border-red-500/20"
+                          }`}>
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
-        {activeTab === "master" && (
-          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                Master Data Invoice ({filteredData.length} Data Ditampilkan)
-              </h2>
+        {/* TAB CONTENT BARU: JOB ID */}
+        {activeTab === "jobid" && (
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Monitoring Job ID & Pekerjaan Alat Berat
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Sinkronisasi database Job ID untuk unit excavator, vibro, dozer, dan lainnya.
+                </p>
+              </div>
+              <div className="w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Cari Job ID / Customer / Unit..."
+                  value={filterJobSearch}
+                  onChange={(e) => setFilterJobSearch(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 placeholder:text-slate-500"
+                />
+              </div>
             </div>
+
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-                    <th className="p-3.5">Tahun / Bulan</th>
-                    <th className="p-3.5">No Invoice</th>
-                    <th className="p-3.5">Customer</th>
-                    <th className="p-3.5">Sales / VIA</th>
-                    <th className="p-3.5">Nilai Invoice</th>
-                    <th className="p-3.5">Dana Masuk</th>
-                    <th className="p-3.5">Sisa Tagihan</th>
-                    <th className="p-3.5">Status</th>
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-900 text-slate-400 uppercase font-bold border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-3">No</th>
+                    <th className="px-4 py-3">Job ID</th>
+                    <th className="px-4 py-3">Customer</th>
+                    <th className="px-4 py-3">Unit / Alat Berat</th>
+                    <th className="px-4 py-3">Status Pekerjaan</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                  {filteredData.length === 0 ? (
+                <tbody>
+                  {loading ? (
                     <tr>
-                      <td colSpan="8" className="p-6 text-center text-slate-500 text-xs">
-                        Tidak ada data invoice yang sesuai dengan filter.
-                      </td>
+                      <td colSpan="5" className="px-4 py-8 text-center text-slate-500">Memuat data Job ID dari server...</td>
+                    </tr>
+                  ) : filteredJobIdData.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="px-4 py-8 text-center text-slate-500">Tidak ada data Job ID yang ditemukan.</td>
                     </tr>
                   ) : (
-                    filteredData.map((row) => (
-                      <tr key={row.id} className="hover:bg-slate-900/40 transition-colors">
-                        <td className="p-3.5 font-medium text-slate-400">
-                          {row.tahun} - {row.bulan}
-                        </td>
-                        <td className="p-3.5 font-bold text-white">{row.noInvoice}</td>
-                        <td className="p-3.5 font-medium text-slate-200">{row.customer}</td>
-                        <td className="p-3.5">
-                          <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-700">
-                            {row.via}
-                          </span>
-                        </td>
-                        <td className="p-3.5 font-semibold text-slate-200">{formatRupiah(row.nilaiInvoice)}</td>
-                        <td className="p-3.5 font-semibold text-emerald-400">{formatRupiah(row.danaMasuk)}</td>
-                        <td className="p-3.5 font-semibold text-red-400">{formatRupiah(row.sisaTagihan)}</td>
-                        <td className="p-3.5">
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                            {row.status}
+                    filteredJobIdData.map((job, idx) => (
+                      <tr key={job.id} className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                        <td className="px-4 py-3 text-slate-500">{idx + 1}</td>
+                        <td className="px-4 py-3 font-bold text-white">{job.jobId}</td>
+                        <td className="px-4 py-3">{job.customer}</td>
+                        <td className="px-4 py-3 text-red-400 font-semibold">{job.unit}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                            {job.status}
                           </span>
                         </td>
                       </tr>
