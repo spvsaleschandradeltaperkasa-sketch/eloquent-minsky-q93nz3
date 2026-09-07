@@ -319,7 +319,6 @@ export default function App() {
     return Object.values(map).sort((a, b) => b.totalRevenue - a.totalRevenue);
   }, [filteredData]);
 
-  // Data khusus untuk tabel Kontribusi Revenue 2026 (berdasarkan seluruh data tahun 2026 yang ada tanpa terpengaruh filter samping/tabel lain)
   const contributionTableData = useMemo(() => {
     const data2026Only = invoices.filter((item) => item.tahun === "2026");
     const map = {};
@@ -580,10 +579,8 @@ export default function App() {
               className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
             >
               <option>Semua tahun</option>
-              <option>2026</option>
-              <option>2025</option>
-              <option>2024</option>
-              <option>2023</option>
+              <option value="2026">2026</option>
+              <option value="2025">2025</option>
             </select>
 
             <select
