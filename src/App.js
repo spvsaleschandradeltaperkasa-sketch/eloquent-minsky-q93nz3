@@ -12,6 +12,7 @@ import {
   PieChart,
   Clock,
   AlertTriangle,
+  TrendingUp,
 } from "lucide-react";
 
 const URL_2025 =
@@ -153,11 +154,9 @@ export default function App() {
 
     const cleanStr = (val) => (val ? val.replace(/^"|"$/g, "").trim() : "");
 
-    // Helper untuk menghitung perkiraan umur piutang (Aging) berdasarkan tanggal atau bulan/tahun invoice jika tanggal spesifik tidak valid
     const calculateAgingDays = (tanggalStr, thnStr, blnStr) => {
       let invoiceDate = new Date();
       if (tanggalStr && tanggalStr !== "-") {
-        // Coba parse format tanggal jika tersedia
         const parsed = new Date(tanggalStr);
         if (!isNaN(parsed.getTime())) {
           invoiceDate = parsed;
@@ -378,12 +377,11 @@ export default function App() {
     return contributionTableData.reduce((acc, curr) => acc + curr.revenue, 0);
   }, [contributionTableData]);
 
-  // Kalkulasi Ringkasan Aging Piutang Berdasarkan Filter Aktif
   const agingSummary = useMemo(() => {
-    let current = 0; // Sisa tagihan <= 30 hari
+    let current = 0;
     let aging31_60 = 0;
     let aging60_120 = 0;
-    let agingCritical120 = 0; // > 120 Hari
+    let agingCritical120 = 0;
 
     filteredData.forEach((item) => {
       if (item.sisaTagihan > 0) {
@@ -401,6 +399,33 @@ export default function App() {
 
     return { current, aging31_60, aging60_120, agingCritical120 };
   }, [filteredData]);
+
+  // Kalkulasi Tren Bulanan (Monthly Trend) Berdasarkan Tahun yang Dipilih
+  const monthlyTrendData = useMemo(() => {
+    const targetYear = filterTahun === "Semua tahun" ? "2026" : filterTahun;
+    const map = {};
+    MONTHS_ORDER.forEach((m) => {
+      map[m] = { revenue: 0, cashIn: 0 };
+    });
+
+    invoices.forEach((row) => {
+      if (row.tahun === targetYear && map[row.bulan]) {
+        map[row.bulan].revenue += row.nilaiInvoice;
+        map[row.bulan].cashIn += row.danaMasuk;
+      }
+    });
+
+    let maxVal = 1000000;
+    const result = MONTHS_ORDER.map((m) => {
+      const rev = map[m].revenue;
+      const cash = map[m].cashIn;
+      if (rev > maxVal) maxVal = rev;
+      if (cash > maxVal) maxVal = cash;
+      return { bulan: m, revenue: rev, cashIn: cash };
+    });
+
+    return { data: result, maxVal };
+  }, [invoices, filterTahun]);
 
   const totalRevenue = useMemo(
     () => filteredData.reduce((acc, curr) => acc + curr.nilaiInvoice, 0),
@@ -557,6 +582,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab("trend")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                activeTab === "trend"
+                  ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-600/25 border border-red-500/30"
+                  : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span>Grafik Tren Bulanan</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("aging")}
               className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
                 activeTab === "aging"
@@ -596,7 +633,7 @@ export default function App() {
             </button>
           </div>
           <div className="text-[10px] text-slate-600 text-center font-medium">
-            Secure Live Data Engine v3.1
+            Secure Live Data Engine v3.2
           </div>
         </div>
       </aside>
@@ -769,7 +806,6 @@ export default function App() {
         {/* TAB CONTENT: SALES PERFORMANCE & KONTRIBUSI REVENUE 2026 */}
         {activeTab === "sales" && (
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-            {/* Bagian Kiri: Performa Sales Person Individual (Lebar 8 Kolom) */}
             <div className="xl:col-span-8 space-y-6">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-sm font-bold text-white uppercase tracking-wider">
@@ -934,7 +970,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Bagian Kanan: Kontribusi Revenue 2026 (Lebar 4 Kolom) */}
             <div className="xl:col-span-4 space-y-6">
               <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5">
                 <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-slate-800/80">
@@ -994,6 +1029,81 @@ export default function App() {
                     {formatRupiah(totalRevenue2026Sum)}
                   </span>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB CONTENT: GRAFIK TREN BULANAN (MONTHLY TREND) */}
+        {activeTab === "trend" && (
+          <div className="space-y-6">
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 mb-6 border-b border-slate-800 gap-4">
+                <div>
+                  <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-red-500" />
+                    Grafik Tren Bulanan (Monthly Trend) - Tahun {filterTahun === "Semua tahun" ? "2026 (Default)" : filterTahun}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Membandingkan pergerakan Revenue vs Cash In untuk menganalisis pola musim proyek (seasonal trend) sewa alat berat.
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 text-xs font-semibold">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
+                    <span className="text-slate-300">Revenue</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                    <span className="text-slate-300">Cash In</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tampilan Visual Grafik Bar/Line Interaktif CSS */}
+              <div className="space-y-4 pt-2">
+                <div className="grid grid-cols-12 gap-2 text-center text-[10px] font-bold text-slate-400 uppercase border-b border-slate-800 pb-2">
+                  <div className="col-span-2 text-left">Bulan</div>
+                  <div className="col-span-5">Revenue</div>
+                  <div className="col-span-5">Cash In</div>
+                </div>
+
+                {monthlyTrendData.data.map((item, idx) => {
+                  const revPct = Math.min((item.revenue / monthlyTrendData.maxVal) * 100, 100);
+                  const cashPct = Math.min((item.cashIn / monthlyTrendData.maxVal) * 100, 100);
+
+                  return (
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-center py-2 border-b border-slate-800/40 hover:bg-slate-900/40 rounded-lg px-2 transition-colors">
+                      <div className="col-span-2 text-xs font-extrabold text-white">
+                        {item.bulan}
+                      </div>
+
+                      <div className="col-span-5 space-y-1">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-blue-400 font-bold">{formatRupiah(item.revenue)}</span>
+                        </div>
+                        <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
+                          <div
+                            className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                            style={{ width: `${revPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="col-span-5 space-y-1">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-emerald-400 font-bold">{formatRupiah(item.cashIn)}</span>
+                        </div>
+                        <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
+                          <div
+                            className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                            style={{ width: `${cashPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1097,7 +1207,7 @@ export default function App() {
               Overview Dashboard Monitoring
             </h2>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Gunakan tab <span className="text-white font-semibold">Sales Performance</span> untuk memantau pencapaian target individu/gabungan, <span className="text-white font-semibold">Aging Piutang</span> untuk memantau piutang kritis (&gt;60 atau &gt;120 hari), atau <span className="text-white font-semibold">Master Invoice</span> untuk melihat detail data keseluruhan.
+              Gunakan tab <span className="text-white font-semibold">Sales Performance</span> untuk memantau pencapaian target, <span className="text-white font-semibold">Grafik Tren Bulanan</span> untuk melihat pola musim proyek, <span className="text-white font-semibold">Aging Piutang</span> untuk memantau piutang macet, atau <span className="text-white font-semibold">Master Invoice</span> untuk melihat detail data keseluruhan.
             </p>
           </div>
         )}
