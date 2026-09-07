@@ -692,12 +692,74 @@ export default function App() {
           </div>
         </div>
 
-        {/* TAB CONTENT: SALES PERFORMANCE & KONTRIBUSI REVENUE 2026 (KONTRIBUSI SEKARANG DI KIRI BAWAH) */}
+        {/* TAB CONTENT: SALES PERFORMANCE & KONTRIBUSI REVENUE 2026 DISANDINGKAN KIRI-KANAN */}
         {activeTab === "sales" && (
-          <div className="space-y-8">
-            {/* Bagian Atas: Performa Sales Person Individual */}
-            <div className="space-y-6">
-              <div className="flex items-center justify-between mb-2">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
+            
+            {/* Kolom Kiri (1 Bagian): Tabel Kontribusi Revenue 2026 */}
+            <div className="xl:col-span-1">
+              <div className="bg-slate-950/80 backdrop-blur-xl rounded-2xl border border-slate-800 shadow-2xl overflow-hidden sticky top-8">
+                <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 border-b border-blue-600/50">
+                  <div className="flex items-center gap-2 text-white font-extrabold text-xs uppercase tracking-wider">
+                    <PieChart className="w-4 h-4 text-blue-200" />
+                    <span>KONTRIBUSI REVENUE 2026</span>
+                  </div>
+                  <div className="text-[10px] text-blue-200 font-medium mt-0.5">
+                    Analisis persentase kontribusi per sales person tahun 2026
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                        <th className="p-3">SALES</th>
+                        <th className="p-3 text-right">Revenue 2026</th>
+                        <th className="p-3 text-right">Kontribusi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-medium">
+                      {contributionTableData.length === 0 ? (
+                        <tr>
+                          <td colSpan="3" className="p-6 text-center text-slate-500 text-xs">
+                            {loading ? "Memuat data 2026..." : "Tidak ada data 2026."}
+                          </td>
+                        </tr>
+                      ) : (
+                        contributionTableData.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-slate-900/40 transition-colors">
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 font-bold text-[10px] border border-slate-700">
+                                {row.sales}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right font-semibold text-slate-200">
+                              {formatRupiah(row.revenue)}
+                            </td>
+                            <td className="p-3 text-right font-black text-blue-400">
+                              {row.kontribusi.toFixed(2)}%
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    {contributionTableData.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-slate-900/90 border-t border-slate-800 font-bold text-white text-xs">
+                          <td className="p-3 uppercase">Total</td>
+                          <td className="p-3 text-right">{formatRupiah(totalRevenue2026Sum)}</td>
+                          <td className="p-3 text-right text-emerald-400">100.00%</td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Kolom Kanan (2 Bagian): Performa Sales Person Individual */}
+            <div className="xl:col-span-2 space-y-6">
+              <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-white uppercase tracking-wider">
                   Performa Sales Person Individual
                 </h2>
@@ -706,7 +768,7 @@ export default function App() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 {salesPerformanceData.map((item) => {
                   const salesKey = item.sales.toUpperCase();
                   const targetConfig = activeTargets[salesKey];
@@ -868,66 +930,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Bagian Bawah: Tabel Kontribusi Revenue 2026 (Dipindah ke Kiri Bawah) */}
-            <div className="max-w-xl">
-              <div className="bg-slate-950/80 backdrop-blur-xl rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 border-b border-blue-600/50">
-                  <div className="flex items-center gap-2 text-white font-extrabold text-xs uppercase tracking-wider">
-                    <PieChart className="w-4 h-4 text-blue-200" />
-                    <span>KONTRIBUSI REVENUE 2026</span>
-                  </div>
-                  <div className="text-[10px] text-blue-200 font-medium mt-0.5">
-                    Analisis persentase kontribusi per sales person tahun 2026
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-                        <th className="p-3">SALES</th>
-                        <th className="p-3 text-right">Revenue 2026</th>
-                        <th className="p-3 text-right">Kontribusi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-medium">
-                      {contributionTableData.length === 0 ? (
-                        <tr>
-                          <td colSpan="3" className="p-6 text-center text-slate-500 text-xs">
-                            {loading ? "Memuat data 2026..." : "Tidak ada data 2026."}
-                          </td>
-                        </tr>
-                      ) : (
-                        contributionTableData.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-slate-900/40 transition-colors">
-                            <td className="p-3">
-                              <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 font-bold text-[10px] border border-slate-700">
-                                {row.sales}
-                              </span>
-                            </td>
-                            <td className="p-3 text-right font-semibold text-slate-200">
-                              {formatRupiah(row.revenue)}
-                            </td>
-                            <td className="p-3 text-right font-black text-blue-400">
-                              {row.kontribusi.toFixed(2)}%
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                    {contributionTableData.length > 0 && (
-                      <tfoot>
-                        <tr className="bg-slate-900/90 border-t border-slate-800 font-bold text-white text-xs">
-                          <td className="p-3 uppercase">Total</td>
-                          <td className="p-3 text-right">{formatRupiah(totalRevenue2026Sum)}</td>
-                          <td className="p-3 text-right text-emerald-400">100.00%</td>
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
