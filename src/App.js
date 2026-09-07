@@ -10,6 +10,8 @@ import {
   LogOut,
   UserCheck,
   PieChart,
+  Clock,
+  AlertTriangle,
 } from "lucide-react";
 
 const URL_2025 =
@@ -151,6 +153,32 @@ export default function App() {
 
     const cleanStr = (val) => (val ? val.replace(/^"|"$/g, "").trim() : "");
 
+    // Helper untuk menghitung perkiraan umur piutang (Aging) berdasarkan tanggal atau bulan/tahun invoice jika tanggal spesifik tidak valid
+    const calculateAgingDays = (tanggalStr, thnStr, blnStr) => {
+      let invoiceDate = new Date();
+      if (tanggalStr && tanggalStr !== "-") {
+        // Coba parse format tanggal jika tersedia
+        const parsed = new Date(tanggalStr);
+        if (!isNaN(parsed.getTime())) {
+          invoiceDate = parsed;
+        } else {
+          const mIdx = MONTHS_ORDER.indexOf(blnStr ? blnStr.toUpperCase() : "");
+          if (mIdx !== -1) {
+            invoiceDate = new Date(parseInt(thnStr || defaultYear), mIdx, 1);
+          }
+        }
+      } else {
+        const mIdx = MONTHS_ORDER.indexOf(blnStr ? blnStr.toUpperCase() : "");
+        if (mIdx !== -1) {
+          invoiceDate = new Date(parseInt(thnStr || defaultYear), mIdx, 1);
+        } else {
+          invoiceDate = new Date(parseInt(thnStr || defaultYear), 0, 1);
+        }
+      }
+      const diffTime = Math.abs(new Date() - invoiceDate);
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    };
+
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue;
       const cols = parseLine(lines[i]);
@@ -161,11 +189,14 @@ export default function App() {
       const noInv = cleanStr(cols[3]);
       const cust = cleanStr(cols[5]);
       const colMonth = cleanStr(cols[21]);
+      const colDate = cleanStr(cols[4]);
 
       if (!noInv && !cust) continue;
 
       const thn = colTahun ? colTahun.replace(".0", "") : defaultYear;
       const salesName = colVia2 || colVia || "-";
+      const sisa = cleanNum(cols[15]);
+      const agingDays = sisa > 0 ? calculateAgingDays(colDate, thn, colMonth) : 0;
 
       result.push({
         id: `${defaultYear}-${i}`,
@@ -173,12 +204,13 @@ export default function App() {
         bulan: colMonth ? colMonth.toUpperCase() : "-",
         via: salesName,
         noInvoice: noInv || "-",
-        tanggal: cleanStr(cols[4]) || "-",
+        tanggal: colDate || "-",
         customer: cust || "Unspecified Customer",
         nilaiInvoice: cleanNum(cols[10]),
         danaMasuk: cleanNum(cols[13]),
-        sisaTagihan: cleanNum(cols[15]),
+        sisaTagihan: sisa,
         status: cleanStr(cols[16]) || "Belum ada Pembayaran",
+        agingDays: agingDays,
       });
     }
     return result;
@@ -346,6 +378,30 @@ export default function App() {
     return contributionTableData.reduce((acc, curr) => acc + curr.revenue, 0);
   }, [contributionTableData]);
 
+  // Kalkulasi Ringkasan Aging Piutang Berdasarkan Filter Aktif
+  const agingSummary = useMemo(() => {
+    let current = 0; // Sisa tagihan <= 30 hari
+    let aging31_60 = 0;
+    let aging60_120 = 0;
+    let agingCritical120 = 0; // > 120 Hari
+
+    filteredData.forEach((item) => {
+      if (item.sisaTagihan > 0) {
+        if (item.agingDays <= 30) {
+          current += item.sisaTagihan;
+        } else if (item.agingDays <= 60) {
+          aging31_60 += item.sisaTagihan;
+        } else if (item.agingDays <= 120) {
+          aging60_120 += item.sisaTagihan;
+        } else {
+          agingCritical120 += item.sisaTagihan;
+        }
+      }
+    });
+
+    return { current, aging31_60, aging60_120, agingCritical120 };
+  }, [filteredData]);
+
   const totalRevenue = useMemo(
     () => filteredData.reduce((acc, curr) => acc + curr.nilaiInvoice, 0),
     [filteredData]
@@ -501,6 +557,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab("aging")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                activeTab === "aging"
+                  ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-600/25 border border-red-500/30"
+                  : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>Aging Piutang (&gt;60 / &gt;120 Hari)</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("master")}
               className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
                 activeTab === "master"
@@ -650,7 +718,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Dynamic KPI Cards */}
+        {/* Dynamic KPI Cards + Ringkasan Aging Piutang Tambahan */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
           <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-blue-500 border border-slate-800 p-5 shadow-xl">
             <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
@@ -682,12 +750,18 @@ export default function App() {
             </div>
           </div>
 
-          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-indigo-500 border border-slate-800 p-5 shadow-xl">
-            <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
-              JUMLAH INVOICE
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-amber-500 border border-slate-800 p-5 shadow-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">
+                AGING &gt; 60 &amp; &gt; 120 HARI
+              </span>
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
             </div>
-            <div className="text-xl font-black text-white">
-              {filteredData.length}
+            <div className="text-lg font-black text-amber-400">
+              {formatRupiah(agingSummary.aging60_120 + agingSummary.agingCritical120)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              Kritis (&gt;120h): <span className="text-red-400 font-bold">{formatRupiah(agingSummary.agingCritical120)}</span>
             </div>
           </div>
         </div>
@@ -925,13 +999,105 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB CONTENT: AGING PIUTANG */}
+        {activeTab === "aging" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
+                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">0 - 30 Hari (Lancar)</div>
+                <div className="text-lg font-black text-white">{formatRupiah(agingSummary.current)}</div>
+              </div>
+              <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
+                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">31 - 60 Hari</div>
+                <div className="text-lg font-black text-blue-400">{formatRupiah(agingSummary.aging31_60)}</div>
+              </div>
+              <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
+                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">60 - 120 Hari (Perhatian)</div>
+                <div className="text-lg font-black text-amber-400">{formatRupiah(agingSummary.aging60_120)}</div>
+              </div>
+              <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-red-500/30 shadow-xl">
+                <div className="text-[10px] font-bold text-red-400 uppercase mb-1">&gt; 120 Hari (Kritis / Macet)</div>
+                <div className="text-lg font-black text-red-400">{formatRupiah(agingSummary.agingCritical120)}</div>
+              </div>
+            </div>
+
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+              <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                  Daftar Invoice Piutang Belum Lunas &amp; Aging Tertinggi
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                      <th className="p-3.5">No Invoice</th>
+                      <th className="p-3.5">Customer</th>
+                      <th className="p-3.5">Sales</th>
+                      <th className="p-3.5">Sisa Tagihan</th>
+                      <th className="p-3.5">Estimasi Umur (Hari)</th>
+                      <th className="p-3.5">Kategori Aging</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                    {filteredData.filter(i => i.sisaTagihan > 0).length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="p-6 text-center text-slate-500 text-xs">
+                          Tidak ada data sisa tagihan piutang.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredData
+                        .filter(i => i.sisaTagihan > 0)
+                        .sort((a, b) => b.agingDays - a.agingDays)
+                        .map((row) => (
+                          <tr key={row.id} className="hover:bg-slate-900/40 transition-colors">
+                            <td className="p-3.5 font-bold text-white">{row.noInvoice}</td>
+                            <td className="p-3.5 font-medium text-slate-200">{row.customer}</td>
+                            <td className="p-3.5">
+                              <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-700">
+                                {row.via}
+                              </span>
+                            </td>
+                            <td className="p-3.5 font-semibold text-red-400">{formatRupiah(row.sisaTagihan)}</td>
+                            <td className="p-3.5 font-bold text-slate-200">{row.agingDays} Hari</td>
+                            <td className="p-3.5">
+                              {row.agingDays > 120 ? (
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+                                  &gt; 120 Hari (Kritis)
+                                </span>
+                              ) : row.agingDays > 60 ? (
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  60 - 120 Hari
+                                </span>
+                              ) : row.agingDays > 30 ? (
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                  31 - 60 Hari
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  0 - 30 Hari (Lancar)
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === "overview" && (
           <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-8 text-center">
             <h2 className="text-lg font-bold text-white mb-2">
               Overview Dashboard Monitoring
             </h2>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Gunakan tab <span className="text-white font-semibold">Sales Performance</span> untuk memantau pencapaian target individu/gabungan, atau <span className="text-white font-semibold">Master Invoice</span> untuk melihat detail data keseluruhan.
+              Gunakan tab <span className="text-white font-semibold">Sales Performance</span> untuk memantau pencapaian target individu/gabungan, <span className="text-white font-semibold">Aging Piutang</span> untuk memantau piutang kritis (&gt;60 atau &gt;120 hari), atau <span className="text-white font-semibold">Master Invoice</span> untuk melihat detail data keseluruhan.
             </p>
           </div>
         )}
