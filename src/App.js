@@ -10,12 +10,16 @@ import {
   LogOut,
   UserCheck,
   PieChart,
+  CheckSquare,
 } from "lucide-react";
 
 const URL_2025 =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=181359356&single=true&output=csv";
 const URL_2026 =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
+// Link CSV untuk To Do List SPV Sales (Ganti link di bawah jika gid spreadsheet to do list Anda berbeda)
+const URL_TODO =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=463203662&single=true&output=csv";
 
 const MONTHS_ORDER = [
   "JANUARI",
@@ -47,6 +51,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState("sales");
   const [invoices, setInvoices] = useState([]);
+  const [todoList, setTodoList] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const [filterTahun, setFilterTahun] = useState("2026");
@@ -55,6 +60,9 @@ export default function App() {
   const [filterCustomer, setFilterCustomer] = useState("");
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
+
+  // Filter khusus To Do List
+  const [todoDivisiFilter, setTodoDivisiFilter] = useState("Semua Divisi");
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -184,6 +192,79 @@ export default function App() {
     return result;
   };
 
+  const parseTodoCSV = (text) => {
+    const lines = text.split(/\r\n|\n/);
+    if (lines.length < 2) return [];
+
+    const result = [];
+    const parseLine = (str) => {
+      const arr = [];
+      let quote = false;
+      let col = "";
+      for (let c of str) {
+        if (c === '"') {
+          quote = !quote;
+        } else if (c === "," && !quote) {
+          arr.push(col.trim());
+          col = "";
+        } else {
+          col += c;
+        }
+      }
+      arr.push(col.trim());
+      return arr;
+    };
+
+    const cleanStr = (val) => (val ? val.replace(/^"|"$/g, "").trim() : "");
+
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const cols = parseLine(lines[i]);
+
+      // Berdasarkan gambar spreadsheet to do list Anda:
+      // Kolom A (index 0): Tanggal
+      // Kolom B (index 1): Prioritas
+      // Kolom C (index 2): Kategori
+      // Kolom D (index 3): Pekerjaan
+      // Kolom E (index 4): Deadline
+      // Kolom F (index 5): Progress
+      // Kolom G (index 6): PIC
+      // Kolom H (index 7): Reminder
+      // Kolom I (index 8): Catatan
+      // Kolom J (index 9): Divisi
+      // Kolom K (index 10): Status
+      const tanggal = cleanStr(cols[0]);
+      const prioritas = cleanStr(cols[1]);
+      const kategori = cleanStr(cols[2]);
+      const pekerjaan = cleanStr(cols[3]);
+      const deadline = cleanStr(cols[4]);
+      const progress = cleanStr(cols[5]);
+      const pic = cleanStr(cols[6]);
+      const reminder = cleanStr(cols[7]);
+      const catatan = cleanStr(cols[8]);
+      const divisi = cleanStr(cols[9]);
+      const status = cleanStr(cols[10]);
+
+      if (!pekerjaan && !divisi) continue;
+
+      result.push({
+        id: `todo-${i}`,
+        tanggal: tanggal || "-",
+        prioritas: prioritas || "-",
+        kategori: kategori || "-",
+        pekerjaan: pekerjaan || "-",
+        deadline: deadline || "-",
+        progress: progress || "0%",
+        pic: pic || "-",
+        reminder: reminder || "-",
+        catatan: catatan || "-",
+        divisi: divisi || "Lainnya",
+        status: status || "Belum Selesai",
+      });
+    }
+    return result;
+  };
+
   const fetchGoogleSheetsData = async () => {
     setLoading(true);
     try {
@@ -204,6 +285,13 @@ export default function App() {
       }
 
       setInvoices(combinedData);
+
+      if (URL_TODO) {
+        const resTodo = await fetch(URL_TODO);
+        const textTodo = await resTodo.text();
+        const todoData = parseTodoCSV(textTodo);
+        setTodoList(todoData);
+      }
     } catch (err) {
       console.error("Gagal mengambil data:", err);
     } finally {
@@ -216,6 +304,56 @@ export default function App() {
       fetchGoogleSheetsData();
     }
   }, [isLoggedIn]);
+
+  // Statistik & Rekap To Do List per Divisi
+  const todoSummaryData = useMemo(() => {
+    const divisions = ["Maintenance", "Operasional", "Logistik", "Sales", "Admin Timesheet"];
+    const map = {};
+
+    divisions.forEach((div) => {
+      map[div] = { divisi: div, belumSelesai: 0, proses: 0, selesai: 0, total: 0 };
+    });
+
+    todoList.forEach((item) => {
+      const divName = Object.keys(map).find(
+        (d) => d.toLowerCase() === item.divisi.toLowerCase()
+      ) || "Lainnya";
+
+      if (!map[divName]) {
+        map[divName] = { divisi: divName, belumSelesai: 0, proses: 0, selesai: 0, total: 0 };
+      }
+
+      const st = item.status.toLowerCase();
+      if (st.includes("selesai") && !st.includes("belum")) {
+        map[divName].selesai += 1;
+      } else if (st.includes("proses")) {
+        map[divName].proses += 1;
+      } else {
+        map[divName].belumSelesai += 1;
+      }
+      map[divName].total += 1;
+    });
+
+    return Object.values(map);
+  }, [todoList]);
+
+  const todoSummaryTotals = useMemo(() => {
+    let bs = 0, pr = 0, sl = 0, tot = 0;
+    todoSummaryData.forEach((row) => {
+      bs += row.belumSelesai;
+      pr += row.proses;
+      sl += row.selesai;
+      tot += row.total;
+    });
+    return { belumSelesai: bs, proses: pr, selesai: sl, total: tot };
+  }, [todoSummaryData]);
+
+  const filteredTodoList = useMemo(() => {
+    if (todoDivisiFilter === "Semua Divisi") return todoList;
+    return todoList.filter(
+      (item) => item.divisi.toLowerCase() === todoDivisiFilter.toLowerCase()
+    );
+  }, [todoList, todoDivisiFilter]);
 
   const filteredData = useMemo(() => {
     return invoices.filter((item) => {
@@ -319,7 +457,6 @@ export default function App() {
     return Object.values(map).sort((a, b) => b.totalRevenue - a.totalRevenue);
   }, [filteredData]);
 
-  // Data khusus untuk tabel Kontribusi Revenue 2026 (berdasarkan seluruh data tahun 2026 yang ada tanpa terpengaruh filter samping/tabel lain)
   const contributionTableData = useMemo(() => {
     const data2026Only = invoices.filter((item) => item.tahun === "2026");
     const map = {};
@@ -512,6 +649,30 @@ export default function App() {
               <FileText className="w-4 h-4" />
               <span>Master Invoice</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab("contribution")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                activeTab === "contribution"
+                  ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-600/25 border border-red-500/30"
+                  : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <PieChart className="w-4 h-4" />
+              <span>Kontribusi Revenue 2026</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("todo")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                activeTab === "todo"
+                  ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-600/25 border border-red-500/30"
+                  : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span>To Do List SPV Sales</span>
+            </button>
           </nav>
         </div>
 
@@ -529,7 +690,7 @@ export default function App() {
             </button>
           </div>
           <div className="text-[10px] text-slate-600 text-center font-medium">
-            Secure Live Data Engine v3.1
+            Secure Live Data Engine v3.2
           </div>
         </div>
       </aside>
@@ -539,10 +700,10 @@ export default function App() {
           <div>
             <div className="text-[11px] font-bold text-red-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              LIVE SPREADSHEETS SYNC (2025 & 2026)
+              LIVE SPREADSHEETS SYNC (2025, 2026 & TO DO LIST)
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight">
-              REVENUE & CASH IN PERFORMANCE
+              {activeTab === "todo" ? "TO DO LIST SPV SALES" : "REVENUE & CASH IN PERFORMANCE"}
             </h1>
           </div>
 
@@ -556,189 +717,189 @@ export default function App() {
           </button>
         </div>
 
-        {/* Global Filter */}
-        <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 tracking-wider uppercase">
-              <Search className="w-3.5 h-3.5 text-red-500" />
-              <span>
-                Filter Data (Target CDP otomatis menyesuaikan bulan & tahun)
-              </span>
-            </div>
-            <button
-              onClick={resetFilters}
-              className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 font-semibold transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" /> Reset Filter
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <select
-              value={filterTahun}
-              onChange={(e) => setFilterTahun(e.target.value)}
-              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
-            >
-              <option>Semua tahun</option>
-              <option>2026</option>
-              <option>2025</option>
-              <option>2024</option>
-              <option>2023</option>
-            </select>
-
-            <select
-              value={filterBulan}
-              onChange={(e) => setFilterBulan(e.target.value)}
-              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
-            >
-              <option>Semua bulan</option>
-              <option>Januari</option>
-              <option>Februari</option>
-              <option>Maret</option>
-              <option>April</option>
-              <option>Mei</option>
-              <option>Juni</option>
-              <option>Juli</option>
-              <option>Agustus</option>
-              <option>September</option>
-              <option>Oktober</option>
-              <option>November</option>
-              <option>Desember</option>
-            </select>
-
-            <input
-              type="text"
-              placeholder="Cari nomor invoice"
-              value={filterNoInvoice}
-              onChange={(e) => setFilterNoInvoice(e.target.value)}
-              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 placeholder:text-slate-500 transition-colors"
-            />
-            <input
-              type="text"
-              placeholder="Cari customer"
-              value={filterCustomer}
-              onChange={(e) => setFilterCustomer(e.target.value)}
-              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 placeholder:text-slate-500 transition-colors"
-            />
-
-            <select
-              value={filterSales}
-              onChange={(e) => setFilterSales(e.target.value)}
-              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
-            >
-              <option>Semua sales / VIA</option>
-              <option>ANS</option>
-              <option>CDF</option>
-              <option>CDP</option>
-              <option>FAN</option>
-              <option>SPL</option>
-              <option>TPM</option>
-              <option>UCI</option>
-            </select>
-
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
-            >
-              <option>Semua status</option>
-              <option>Lunas</option>
-              <option>Lebih Bayar</option>
-              <option>Kurang Bayar</option>
-              <option>Belum ada Pembayaran</option>
-              <option>Belum Lunas (Kurang Bayar & Belum Bayar)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Dynamic KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-blue-500 border border-slate-800 p-5 shadow-xl">
-            <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
-              TOTAL REVENUE
-            </div>
-            <div className="text-xl font-black text-white">
-              {formatRupiah(totalRevenue)}
-            </div>
-          </div>
-
-          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-emerald-500 border border-slate-800 p-5 shadow-xl">
-            <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
-              CASH IN
-            </div>
-            <div className="text-xl font-black text-white">
-              {formatRupiah(totalCashIn)}
-            </div>
-            <div className="text-[11px] font-semibold text-emerald-400 mt-1">
-              {collectionRate}% collection rate
-            </div>
-          </div>
-
-          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-red-500 border border-slate-800 p-5 shadow-xl">
-            <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
-              SISA TAGIHAN
-            </div>
-            <div className="text-xl font-black text-white">
-              {formatRupiah(totalSisaTagihan)}
-            </div>
-          </div>
-
-          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-indigo-500 border border-slate-800 p-5 shadow-xl">
-            <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
-              JUMLAH INVOICE
-            </div>
-            <div className="text-xl font-black text-white">
-              {filteredData.length}
-            </div>
-          </div>
-        </div>
-
-        {/* TAB CONTENT: SALES PERFORMANCE & KONTRIBUSI REVENUE 2026 */}
-        {activeTab === "sales" && (
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-            {/* Bagian Kiri: Performa Sales Person Individual (Lebar 8 Kolom) */}
-            <div className="xl:col-span-8 space-y-6">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                  Performa Sales Person Individual
-                </h2>
-                <span className="text-xs text-slate-400 font-semibold">
-                  Total Sales: {salesPerformanceData.length}
+        {activeTab !== "contribution" && activeTab !== "todo" && (
+          <div className="bg-slate-950/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-400 tracking-wider uppercase">
+                <Search className="w-3.5 h-3.5 text-red-500" />
+                <span>
+                  Filter Data (Target CDP otomatis menyesuaikan bulan & tahun)
                 </span>
               </div>
+              <button
+                onClick={resetFilters}
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 font-semibold transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Reset Filter
+              </button>
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {salesPerformanceData.map((item) => {
-                  const salesKey = item.sales.toUpperCase();
-                  const targetConfig = activeTargets[salesKey];
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <select
+                value={filterTahun}
+                onChange={(e) => setFilterTahun(e.target.value)}
+                className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
+              >
+                <option>Semua tahun</option>
+                <option>2026</option>
+                <option>2025</option>
+                <option>2024</option>
+                <option>2023</option>
+              </select>
 
-                  const hasTarget = Boolean(targetConfig);
-                  const isCombined = targetConfig?.isCombined || false;
+              <select
+                value={filterBulan}
+                onChange={(e) => setFilterBulan(e.target.value)}
+                className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
+              >
+                <option>Semua bulan</option>
+                <option>Januari</option>
+                <option>Februari</option>
+                <option>Maret</option>
+                <option>April</option>
+                <option>Mei</option>
+                <option>Juni</option>
+                <option>Juli</option>
+                <option>Agustus</option>
+                <option>September</option>
+                <option>Oktober</option>
+                <option>November</option>
+                <option>Desember</option>
+              </select>
 
-                  const revActual = isCombined
-                    ? combinedAnsFanData.revenue
-                    : item.totalRevenue;
-                  const cashInActual = isCombined
-                    ? combinedAnsFanData.cashIn
-                    : item.totalCashIn;
+              <input
+                type="text"
+                placeholder="Cari nomor invoice"
+                value={filterNoInvoice}
+                onChange={(e) => setFilterNoInvoice(e.target.value)}
+                className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 placeholder:text-slate-500 transition-colors"
+              />
+              <input
+                type="text"
+                placeholder="Cari customer"
+                value={filterCustomer}
+                onChange={(e) => setFilterCustomer(e.target.value)}
+                className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 placeholder:text-slate-500 transition-colors"
+              />
 
-                  const targetRev = targetConfig ? targetConfig.revenue : 0;
-                  const targetCashIn = targetConfig ? targetConfig.cashIn : 0;
+              <select
+                value={filterSales}
+                onChange={(e) => setFilterSales(e.target.value)}
+                className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
+              >
+                <option>Semua sales / VIA</option>
+                <option>ANS</option>
+                <option>CDF</option>
+                <option>CDP</option>
+                <option>FAN</option>
+                <option>SPL</option>
+                <option>TPM</option>
+                <option>UCI</option>
+              </select>
 
-                  const revPct =
-                    targetRev > 0
-                      ? ((revActual / targetRev) * 100).toFixed(1)
-                      : 0;
-                  const cashInPct =
-                    targetCashIn > 0
-                      ? ((cashInActual / targetCashIn) * 100).toFixed(1)
-                      : 0;
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
+              >
+                <option>Semua status</option>
+                <option>Lunas</option>
+                <option>Lebih Bayar</option>
+                <option>Kurang Bayar</option>
+                <option>Belum ada Pembayaran</option>
+                <option>Belum Lunas (Kurang Bayar & Belum Bayar)</option>
+              </select>
+            </div>
+          </div>
+        )}
 
-                  return (
-                    <div
-                      key={item.sales}
-                      className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5 hover:border-slate-700 transition-all"
-                    >
+        {activeTab !== "contribution" && activeTab !== "todo" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-blue-500 border border-slate-800 p-5 shadow-xl">
+              <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
+                TOTAL REVENUE
+              </div>
+              <div className="text-xl font-black text-white">
+                {formatRupiah(totalRevenue)}
+              </div>
+            </div>
+
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-emerald-500 border border-slate-800 p-5 shadow-xl">
+              <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
+                CASH IN
+              </div>
+              <div className="text-xl font-black text-white">
+                {formatRupiah(totalCashIn)}
+              </div>
+              <div className="text-[11px] font-semibold text-emerald-400 mt-1">
+                {collectionRate}% collection rate
+              </div>
+            </div>
+
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-red-500 border border-slate-800 p-5 shadow-xl">
+              <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
+                SISA TAGIHAN
+              </div>
+              <div className="text-xl font-black text-white">
+                {formatRupiah(totalSisaTagihan)}
+              </div>
+            </div>
+
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-indigo-500 border border-slate-800 p-5 shadow-xl">
+              <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
+                JUMLAH INVOICE
+              </div>
+              <div className="text-xl font-black text-white">
+                {filteredData.length}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "sales" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                Performa Sales Person Individual
+              </h2>
+              <span className="text-xs text-slate-400 font-semibold">
+                Total Sales: {salesPerformanceData.length}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {salesPerformanceData.map((item) => {
+                const salesKey = item.sales.toUpperCase();
+                const targetConfig = activeTargets[salesKey];
+
+                const hasTarget = Boolean(targetConfig);
+                const isCombined = targetConfig?.isCombined || false;
+
+                const revActual = isCombined
+                  ? combinedAnsFanData.revenue
+                  : item.totalRevenue;
+                const cashInActual = isCombined
+                  ? combinedAnsFanData.cashIn
+                  : item.totalCashIn;
+
+                const targetRev = targetConfig ? targetConfig.revenue : 0;
+                const targetCashIn = targetConfig ? targetConfig.cashIn : 0;
+
+                const revPct =
+                  targetRev > 0
+                    ? ((revActual / targetRev) * 100).toFixed(1)
+                    : 0;
+                const cashInPct =
+                  targetCashIn > 0
+                    ? ((cashInActual / targetCashIn) * 100).toFixed(1)
+                    : 0;
+
+                return (
+                  <div
+                    key={item.sales}
+                    className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5 hover:border-slate-700 transition-all flex flex-col justify-between"
+                  >
+                    <div>
                       <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-800/80">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-extrabold rounded-xl flex items-center justify-center text-xs shadow-md border border-blue-400/30">
@@ -842,95 +1003,244 @@ export default function App() {
                           </div>
                         </div>
                       )}
+                    </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-emerald-950/20 border border-emerald-900/30 rounded-xl p-2.5 text-center">
-                          <span className="block text-[9px] font-bold text-emerald-400 uppercase">
-                            Lunas / Lebih Bayar
-                          </span>
-                          <span className="font-bold text-white text-xs">
-                            {item.lunasCount} Inv
-                          </span>
-                        </div>
-                        <div className="bg-red-950/20 border border-red-900/30 rounded-xl p-2.5 text-center">
-                          <span className="block text-[9px] font-bold text-red-400 uppercase">
-                            Outstanding
-                          </span>
-                          <span className="font-bold text-white text-xs">
-                            {item.outstandingCount} Inv
-                          </span>
-                        </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-2">
+                      <div className="bg-emerald-950/20 border border-emerald-900/30 rounded-xl p-2.5 text-center">
+                        <span className="block text-[9px] font-bold text-emerald-400 uppercase">
+                          Lunas / Lebih Bayar
+                        </span>
+                        <span className="font-bold text-white text-xs">
+                          {item.lunasCount} Inv
+                        </span>
+                      </div>
+                      <div className="bg-red-950/20 border border-red-900/30 rounded-xl p-2.5 text-center">
+                        <span className="block text-[9px] font-bold text-red-400 uppercase">
+                          Outstanding
+                        </span>
+                        <span className="font-bold text-white text-xs">
+                          {item.outstandingCount} Inv
+                        </span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
+          </div>
+        )}
 
-            {/* Bagian Kanan: Tabel Kontribusi Revenue 2026 (Lebar 4 Kolom) */}
-            <div className="xl:col-span-4 space-y-6">
-              <div className="bg-slate-950/80 backdrop-blur-xl rounded-2xl border border-slate-800 shadow-2xl overflow-hidden sticky top-6">
-                <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 border-b border-blue-600/50">
-                  <div className="flex items-center gap-2 text-white font-extrabold text-xs uppercase tracking-wider">
-                    <PieChart className="w-4 h-4 text-blue-200" />
+        {activeTab === "contribution" && (
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-slate-950/80 backdrop-blur-xl rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-6 border-b border-blue-600/50 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2.5 text-white font-extrabold text-sm uppercase tracking-wider">
+                    <PieChart className="w-5 h-5 text-blue-200" />
                     <span>KONTRIBUSI REVENUE 2026</span>
                   </div>
-                  <div className="text-[10px] text-blue-200 font-medium mt-0.5">
-                    Analisis persentase kontribusi per sales person tahun 2026
+                  <div className="text-xs text-blue-200 font-medium mt-1">
+                    Analisis persentase kontribusi per sales person berdasarkan data live spreadsheet tahun 2026
                   </div>
                 </div>
+                <div className="hidden sm:block text-right">
+                  <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest block">Total Akumulasi</span>
+                  <span className="text-sm font-black text-white">{formatRupiah(totalRevenue2026Sum)}</span>
+                </div>
+              </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-                        <th className="p-3">SALES</th>
-                        <th className="p-3 text-right">Revenue 2026</th>
-                        <th className="p-3 text-right">Kontribusi</th>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[11px] tracking-wider">
+                      <th className="p-4">SALES PERSON</th>
+                      <th className="p-4 text-right">Revenue 2026</th>
+                      <th className="p-4 text-right">Kontribusi (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-medium text-sm">
+                    {contributionTableData.length === 0 ? (
+                      <tr>
+                        <td colSpan="3" className="p-8 text-center text-slate-500 text-xs">
+                          {loading ? "Memuat data 2026..." : "Tidak ada data untuk tahun 2026."}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-medium">
-                      {contributionTableData.length === 0 ? (
-                        <tr>
-                          <td colSpan="3" className="p-6 text-center text-slate-500 text-xs">
-                            {loading ? "Memuat data 2026..." : "Tidak ada data 2026."}
+                    ) : (
+                      contributionTableData.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-slate-900/40 transition-colors">
+                          <td className="p-4">
+                            <span className="px-3 py-1 rounded-lg bg-slate-800 text-slate-100 font-bold text-xs border border-slate-700">
+                              {row.sales}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right font-bold text-slate-200">
+                            {formatRupiah(row.revenue)}
+                          </td>
+                          <td className="p-4 text-right font-black text-blue-400 text-base">
+                            {row.kontribusi.toFixed(2)}%
                           </td>
                         </tr>
-                      ) : (
-                        contributionTableData.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-slate-900/40 transition-colors">
-                            <td className="p-3">
-                              <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 font-bold text-[10px] border border-slate-700">
-                                {row.sales}
-                              </span>
-                            </td>
-                            <td className="p-3 text-right font-semibold text-slate-200">
-                              {formatRupiah(row.revenue)}
-                            </td>
-                            <td className="p-3 text-right font-black text-blue-400">
-                              {row.kontribusi.toFixed(2)}%
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                    {contributionTableData.length > 0 && (
-                      <tfoot>
-                        <tr className="bg-slate-900/90 border-t border-slate-800 font-bold text-white text-xs">
-                          <td className="p-3 uppercase">Total</td>
-                          <td className="p-3 text-right">{formatRupiah(totalRevenue2026Sum)}</td>
-                          <td className="p-3 text-right text-emerald-400">100.00%</td>
-                        </tr>
-                      </tfoot>
+                      ))
                     )}
-                  </table>
-                </div>
+                  </tbody>
+                  {contributionTableData.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-slate-900/90 border-t border-slate-800 font-black text-white text-sm">
+                        <td className="p-4 uppercase">Total Keseluruhan</td>
+                        <td className="p-4 text-right">{formatRupiah(totalRevenue2026Sum)}</td>
+                        <td className="p-4 text-right text-emerald-400 text-base">100.00%</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB MASTER INVOICE */}
+        {activeTab === "todo" && (
+          <div className="space-y-6">
+            {/* Tabel Ringkasan To Do List (Mirip Bagian Atas Gambar Anda) */}
+            <div className="bg-slate-950/80 backdrop-blur-xl rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
+              <div className="bg-gradient-to-r from-amber-600 to-yellow-700 p-4 border-b border-amber-500/40 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white font-extrabold text-xs uppercase tracking-wider">
+                  <CheckSquare className="w-4 h-4 text-amber-200" />
+                  <span>REKAP TO DO LIST SPV SALES</span>
+                </div>
+                <div className="text-[11px] text-amber-100 font-bold">
+                  Total Task: {todoSummaryTotals.total}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                      <th className="p-3.5">Divisi</th>
+                      <th className="p-3.5 text-center text-red-400">Belum Selesai</th>
+                      <th className="p-3.5 text-center text-amber-400">Proses</th>
+                      <th className="p-3.5 text-center text-emerald-400">Selesai</th>
+                      <th className="p-3.5 text-center font-black text-white">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-medium">
+                    {todoSummaryData.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-900/40 transition-colors">
+                        <td className="p-3.5 font-bold text-white">{row.divisi}</td>
+                        <td className="p-3.5 text-center font-bold text-red-400">{row.belumSelesai}</td>
+                        <td className="p-3.5 text-center font-bold text-amber-400">{row.proses}</td>
+                        <td className="p-3.5 text-center font-bold text-emerald-400">{row.selesai}</td>
+                        <td className="p-3.5 text-center font-black text-white">{row.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-900/90 border-t border-slate-800 font-black text-white">
+                      <td className="p-3.5 uppercase">Total</td>
+                      <td className="p-3.5 text-center text-red-400">{todoSummaryTotals.belumSelesai}</td>
+                      <td className="p-3.5 text-center text-amber-400">{todoSummaryTotals.proses}</td>
+                      <td className="p-3.5 text-center text-emerald-400">{todoSummaryTotals.selesai}</td>
+                      <td className="p-3.5 text-center text-white">{todoSummaryTotals.total}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* Tabel Detail To Do List dengan Filter Divisi */}
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+              <div className="p-4 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="font-bold text-xs text-white uppercase tracking-wider">
+                  Detail Task Pekerjaan ({filteredTodoList.length})
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 font-bold uppercase">Filter Divisi:</span>
+                  <select
+                    value={todoDivisiFilter}
+                    onChange={(e) => setTodoDivisiFilter(e.target.value)}
+                    className="bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500"
+                  >
+                    <option>Semua Divisi</option>
+                    <option>Maintenance</option>
+                    <option>Operasional</option>
+                    <option>Logistik</option>
+                    <option>Sales</option>
+                    <option>Admin Timesheet</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                      <th className="p-3.5">Tanggal</th>
+                      <th className="p-3.5">Prioritas</th>
+                      <th className="p-3.5">Kategori</th>
+                      <th className="p-3.5">Pekerjaan</th>
+                      <th className="p-3.5">Deadline</th>
+                      <th className="p-3.5">Progress</th>
+                      <th className="p-3.5">PIC</th>
+                      <th className="p-3.5">Catatan</th>
+                      <th className="p-3.5">Divisi</th>
+                      <th className="p-3.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-medium">
+                    {filteredTodoList.length === 0 ? (
+                      <tr>
+                        <td colSpan="10" className="p-8 text-center text-slate-500 text-xs">
+                          {loading ? "Memuat To Do List..." : "Tidak ada data task yang sesuai."}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredTodoList.map((row) => {
+                        const st = row.status.toLowerCase();
+                        let badgeStyle = "bg-red-500/10 text-red-400 border-red-500/20";
+                        if (st.includes("selesai") && !st.includes("belum")) {
+                          badgeStyle = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                        } else if (st.includes("proses")) {
+                          badgeStyle = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+                        }
+
+                        let prioStyle = "text-slate-300";
+                        if (row.prioritas.toLowerCase().includes("tinggi")) {
+                          prioStyle = "text-red-400 font-bold";
+                        } else if (row.prioritas.toLowerCase().includes("rendah")) {
+                          prioStyle = "text-emerald-400 font-bold";
+                        }
+
+                        return (
+                          <tr key={row.id} className="hover:bg-slate-900/40 transition-colors">
+                            <td className="p-3.5 text-slate-300">{row.tanggal}</td>
+                            <td className={`p-3.5 ${prioStyle}`}>{row.prioritas}</td>
+                            <td className="p-3.5 text-slate-300">{row.kategori}</td>
+                            <td className="p-3.5 font-bold text-white max-w-xs">{row.pekerjaan}</td>
+                            <td className="p-3.5 text-slate-300">{row.deadline}</td>
+                            <td className="p-3.5 text-blue-400 font-bold">{row.progress}</td>
+                            <td className="p-3.5 text-slate-300">{row.pic}</td>
+                            <td className="p-3.5 text-slate-400 max-w-xs">{row.catatan}</td>
+                            <td className="p-3.5">
+                              <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 font-bold text-[10px] border border-slate-700">
+                                {row.divisi}
+                              </span>
+                            </td>
+                          <td className="p-3.5">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${badgeStyle}`}>
+                                {row.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {(activeTab === "overview" || activeTab === "master") && (
           <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-4 border-b border-slate-800/80 font-bold text-xs text-white uppercase tracking-wider flex justify-between items-center">
