@@ -319,7 +319,6 @@ export default function App() {
     return Object.values(map).sort((a, b) => b.totalRevenue - a.totalRevenue);
   }, [filteredData]);
 
-  // Data khusus untuk tabel Kontribusi Revenue 2026 (berdasarkan seluruh data tahun 2026 yang ada tanpa terpengaruh filter samping/tabel lain)
   const contributionTableData = useMemo(() => {
     const data2026Only = invoices.filter((item) => item.tahun === "2026");
     const map = {};
@@ -693,11 +692,11 @@ export default function App() {
           </div>
         </div>
 
-        {/* TAB CONTENT: SALES PERFORMANCE & KONTRIBUSI REVENUE 2026 */}
+        {/* TAB CONTENT: SALES PERFORMANCE & KONTRIBUSI REVENUE 2026 (KONTRIBUSI SEKARANG DI KIRI BAWAH) */}
         {activeTab === "sales" && (
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-            {/* Bagian Kiri: Performa Sales Person Individual (Lebar 8 Kolom) */}
-            <div className="xl:col-span-8 space-y-6">
+          <div className="space-y-8">
+            {/* Bagian Atas: Performa Sales Person Individual */}
+            <div className="space-y-6">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-sm font-bold text-white uppercase tracking-wider">
                   Performa Sales Person Individual
@@ -707,7 +706,7 @@ export default function App() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 {salesPerformanceData.map((item) => {
                   const salesKey = item.sales.toUpperCase();
                   const targetConfig = activeTargets[salesKey];
@@ -737,113 +736,115 @@ export default function App() {
                   return (
                     <div
                       key={item.sales}
-                      className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5 hover:border-slate-700 transition-all"
+                      className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5 hover:border-slate-700 transition-all flex flex-col justify-between"
                     >
-                      <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-800/80">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-extrabold rounded-xl flex items-center justify-center text-xs shadow-md border border-blue-400/30">
-                            {item.sales}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <h3 className="font-bold text-white text-sm">
-                                {item.sales}
-                              </h3>
-                              {isCombined && (
-                                <span className="bg-red-500/10 text-red-400 border border-red-500/20 text-[9px] font-bold px-2 py-0.5 rounded-full">
-                                  Gabungan (ANS+FAN)
-                                </span>
-                              )}
+                      <div>
+                        <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-800/80">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-extrabold rounded-xl flex items-center justify-center text-xs shadow-md border border-blue-400/30">
+                              {item.sales}
                             </div>
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              {item.totalCount} Invoices
-                            </span>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <h3 className="font-bold text-white text-sm">
+                                  {item.sales}
+                                </h3>
+                                {isCombined && (
+                                  <span className="bg-red-500/10 text-red-400 border border-red-500/20 text-[9px] font-bold px-2 py-0.5 rounded-full">
+                                    Gabungan (ANS+FAN)
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-medium">
+                                {item.totalCount} Invoices
+                              </span>
+                            </div>
                           </div>
+
+                          {hasTarget ? (
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                                revPct >= 100
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                  : "bg-red-500/10 text-red-400 border-red-500/20"
+                              }`}
+                            >
+                              {revPct}% Rev
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                              Tanpa Target
+                            </span>
+                          )}
                         </div>
 
                         {hasTarget ? (
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                              revPct >= 100
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                : "bg-red-500/10 text-red-400 border-red-500/20"
-                            }`}
-                          >
-                            {revPct}% Rev
-                          </span>
+                          <div className="space-y-3 mb-4">
+                            <div className="bg-blue-950/30 rounded-xl p-3 border border-blue-900/40">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] font-bold text-blue-400 uppercase">
+                                  REVENUE (Target: {formatRupiah(targetRev)})
+                                </span>
+                                <span className="text-xs font-extrabold text-blue-300">
+                                  {revPct}%
+                                </span>
+                              </div>
+                              <div className="text-sm font-black text-white">
+                                {formatRupiah(item.totalRevenue)}
+                              </div>
+                              <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                                <div
+                                  className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.min(revPct, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="bg-emerald-950/30 rounded-xl p-3 border border-emerald-900/40">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase">
+                                  CASH IN (Target: {formatRupiah(targetCashIn)})
+                                </span>
+                                <span className="text-xs font-extrabold text-emerald-300">
+                                  {cashInPct}%
+                                </span>
+                              </div>
+                              <div className="text-sm font-black text-white">
+                                {formatRupiah(item.totalCashIn)}
+                              </div>
+                              <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                                <div
+                                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${Math.min(cashInPct, 100)}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
-                            Tanpa Target
-                          </span>
+                          <div className="space-y-2.5 mb-4">
+                            <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase">
+                                TOTAL REVENUE ACTUAL
+                              </div>
+                              <div className="text-sm font-extrabold text-white mt-0.5">
+                                {formatRupiah(item.totalRevenue)}
+                              </div>
+                            </div>
+                            <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase">
+                                TOTAL CASH IN ACTUAL
+                              </div>
+                              <div className="text-sm font-extrabold text-white mt-0.5">
+                                {formatRupiah(item.totalCashIn)}
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
 
-                      {hasTarget ? (
-                        <div className="space-y-3 mb-4">
-                          <div className="bg-blue-950/30 rounded-xl p-3 border border-blue-900/40">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-[10px] font-bold text-blue-400 uppercase">
-                                REVENUE (Target: {formatRupiah(targetRev)})
-                              </span>
-                              <span className="text-xs font-extrabold text-blue-300">
-                                {revPct}%
-                              </span>
-                            </div>
-                            <div className="text-sm font-black text-white">
-                              {formatRupiah(item.totalRevenue)}
-                            </div>
-                            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                              <div
-                                className="bg-blue-500 h-full rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(revPct, 100)}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="bg-emerald-950/30 rounded-xl p-3 border border-emerald-900/40">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-[10px] font-bold text-emerald-400 uppercase">
-                                CASH IN (Target: {formatRupiah(targetCashIn)})
-                              </span>
-                              <span className="text-xs font-extrabold text-emerald-300">
-                                {cashInPct}%
-                              </span>
-                            </div>
-                            <div className="text-sm font-black text-white">
-                              {formatRupiah(item.totalCashIn)}
-                            </div>
-                            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                              <div
-                                className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                                style={{
-                                  width: `${Math.min(cashInPct, 100)}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-2.5 mb-4">
-                          <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase">
-                              TOTAL REVENUE ACTUAL
-                            </div>
-                            <div className="text-sm font-extrabold text-white mt-0.5">
-                              {formatRupiah(item.totalRevenue)}
-                            </div>
-                          </div>
-                          <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase">
-                              TOTAL CASH IN ACTUAL
-                            </div>
-                            <div className="text-sm font-extrabold text-white mt-0.5">
-                              {formatRupiah(item.totalCashIn)}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2 text-xs pt-2">
                         <div className="bg-emerald-950/20 border border-emerald-900/30 rounded-xl p-2.5 text-center">
                           <span className="block text-[9px] font-bold text-emerald-400 uppercase">
                             Lunas / Lebih Bayar
@@ -867,9 +868,9 @@ export default function App() {
               </div>
             </div>
 
-            {/* Bagian Kanan: Tabel Kontribusi Revenue 2026 (Lebar 4 Kolom) */}
-            <div className="xl:col-span-4 space-y-6">
-              <div className="bg-slate-950/80 backdrop-blur-xl rounded-2xl border border-slate-800 shadow-2xl overflow-hidden sticky top-6">
+            {/* Bagian Bawah: Tabel Kontribusi Revenue 2026 (Dipindah ke Kiri Bawah) */}
+            <div className="max-w-xl">
+              <div className="bg-slate-950/80 backdrop-blur-xl rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
                 <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 border-b border-blue-600/50">
                   <div className="flex items-center gap-2 text-white font-extrabold text-xs uppercase tracking-wider">
                     <PieChart className="w-4 h-4 text-blue-200" />
