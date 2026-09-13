@@ -11,6 +11,7 @@ import {
   UserCheck,
   TrendingUp,
   Briefcase,
+  Wallet,
   Clock,
 } from "lucide-react";
 
@@ -20,10 +21,8 @@ const URL_2026 =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
 const URL_JOB_ID =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=1656309510&single=true&output=csv";
-
-// Tambahkan URL untuk Alokasi Kas Masuk di sini (Ganti link pub?gid=... sesuai tab Google Sheets Alokasi Kas Masuk Anda)
 const URL_ALOKASI_KAS =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=0&single=true&output=csv";
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=1728018265&single=true&output=csv";
 
 const MONTHS_ORDER = [
   "JANUARI",
@@ -66,7 +65,6 @@ export default function App() {
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
   const [filterJobSearch, setFilterJobSearch] = useState("");
-  const [filterAlokasiKas, setFilterAlokasiKas] = useState("Semua alokasi kas masuk");
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -91,7 +89,7 @@ export default function App() {
     setCurrentUser("");
   };
 
-  const parseCSV = (text, defaultYear, kasMapping = {}) => {
+  const parseCSV = (text, defaultYear) => {
     const lines = text.split(/\r\n|\n/);
     if (lines.length < 2) return [];
 
@@ -171,9 +169,6 @@ export default function App() {
       const sisa = cleanNum(cols[15]);
       const agingDays = sisa > 0 ? calculateAgingDays(colDate, thn, colMonth) : 0;
 
-      // Cek alokasi kas dari kolom internal atau mapping URL alokasi kas terpisah
-      const colAlokasiKas = cleanStr(cols[24]) || kasMapping[noInv] || "-";
-
       result.push({
         id: `${defaultYear}-${i}`,
         tahun: thn,
@@ -187,49 +182,9 @@ export default function App() {
         sisaTagihan: sisa,
         status: cleanStr(cols[16]) || "Belum ada Pembayaran",
         agingDays: agingDays,
-        alokasiKasMasuk: colAlokasiKas,
       });
     }
     return result;
-  };
-
-  const parseAlokasiKasCSV = (text) => {
-    const lines = text.split(/\r\n|\n/);
-    if (lines.length < 2) return { list: [], mapping: {} };
-    const list = [];
-    const mapping = {};
-    const parseLine = (str) => {
-      const arr = [];
-      let quote = false;
-      let col = "";
-      for (let c of str) {
-        if (c === '"') {
-          quote = !quote;
-        } else if (c === "," && !quote) {
-          arr.push(col.trim());
-          col = "";
-        } else {
-          col += c;
-        }
-      }
-      arr.push(col.trim());
-      return arr;
-    };
-
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      const cols = parseLine(lines[i]);
-      const cleanStr = (val) => (val ? val.replace(/^"|"$/g, "").trim() : "");
-      
-      const noInv = cleanStr(cols[0]) || cleanStr(cols[1]);
-      const alokasi = cleanStr(cols[2]) || cleanStr(cols[3]) || "-";
-
-      if (noInv && noInv !== "-") {
-        mapping[noInv] = alokasi;
-        list.push(alokasi);
-      }
-    }
-    return { list: Array.from(new Set(list)), mapping };
   };
 
   const parseJobIdCSV = (text) => {
@@ -286,38 +241,82 @@ export default function App() {
     return result;
   };
 
+  const parseAlokasiKasCSV = (text) => {
+    const lines = text.split(/\r\n|\n/);
+    if (lines.length < 2) return [];
+    const result = [];
+    const parseLine = (str) => {
+      const arr = [];
+      let quote = false;
+      let col = "";
+      for (let c of str) {
+        if (c === '"') {
+          quote = !quote;
+        } else if (c === "," && !quote) {
+          arr.push(col.trim());
+          col = "";
+        } else {
+          col += c;
+        }
+      }
+      arr.push(col.trim());
+      return arr;
+    };
+
+    const cleanNum = (val) => {
+      if (!val) return 0;
+      let s = val.replace(/"/g, "").trim();
+      if (s === "-" || s === "") return 0;
+      if (s.includes(".")) {
+        s = s.replace(/\./g, "").replace(",", ".");
+      } else {
+        s = s.replace(",", ".");
+      }
+      return parseFloat(s) || 0;
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const cols = parseLine(lines[i]);
+      const cleanStr = (val) => (val ? val.replace(/^"|"$/g, "").trim() : "");
+      
+      const col1 = cleanStr(cols[0]);
+      const col2 = cleanStr(cols[1]);
+      const col3 = cleanStr(cols[2]);
+      const col4 = cleanStr(cols[3]);
+      const col5 = cleanStr(cols[4]);
+
+      if (!col1 && !col2) continue;
+
+      result.push({
+        id: `kas-${i}`,
+        kolom1: col1 || "-",
+        kolom2: col2 || "-",
+        kolom3: col3 || "-",
+        kolom4: col4 || "-",
+        nominal: cleanNum(cols[5]),
+        keterangan: cleanStr(cols[6]) || "-",
+      });
+    }
+    return result;
+  };
+
   const fetchGoogleSheetsData = async () => {
     setLoading(true);
     try {
-      let kasMapping = {};
-      let kasList = [];
-
-      if (URL_ALOKASI_KAS) {
-        try {
-          const resKas = await fetch(URL_ALOKASI_KAS);
-          const textKas = await resKas.text();
-          const parsedKas = parseAlokasiKasCSV(textKas);
-          kasMapping = parsedKas.mapping;
-          kasList = parsedKas.list;
-          setAlokasiKasData(kasList);
-        } catch (e) {
-          console.error("Gagal load URL Alokasi Kas:", e);
-        }
-      }
-
       let combinedData = [];
 
       if (URL_2025) {
         const res2025 = await fetch(URL_2025);
         const text2025 = await res2025.text();
-        const data2025 = parseCSV(text2025, "2025", kasMapping);
+        const data2025 = parseCSV(text2025, "2025");
         combinedData = [...combinedData, ...data2025];
       }
 
       if (URL_2026) {
         const res2026 = await fetch(URL_2026);
         const text2026 = await res2026.text();
-        const data2026 = parseCSV(text2026, "2026", kasMapping);
+        const data2026 = parseCSV(text2026, "2026");
         combinedData = [...combinedData, ...data2026];
       }
 
@@ -328,6 +327,13 @@ export default function App() {
         const textJob = await resJob.text();
         const parsedJob = parseJobIdCSV(textJob);
         setJobIdData(parsedJob);
+      }
+
+      if (URL_ALOKASI_KAS) {
+        const resKas = await fetch(URL_ALOKASI_KAS);
+        const textKas = await resKas.text();
+        const parsedKas = parseAlokasiKasCSV(textKas);
+        setAlokasiKasData(parsedKas);
       }
     } catch (err) {
       console.error("Gagal mengambil data:", err);
@@ -370,11 +376,6 @@ export default function App() {
         item.via.toUpperCase() !== filterSales.toUpperCase()
       )
         return false;
-      if (
-        filterAlokasiKas !== "Semua alokasi kas masuk" &&
-        item.alokasiKasMasuk.toUpperCase() !== filterAlokasiKas.toUpperCase()
-      )
-        return false;
 
       if (filterStatus !== "Semua status") {
         if (filterStatus === "Belum Lunas (Kurang Bayar & Belum Bayar)") {
@@ -399,7 +400,6 @@ export default function App() {
     filterCustomer,
     filterSales,
     filterStatus,
-    filterAlokasiKas,
   ]);
 
   const filteredJobIdData = useMemo(() => {
@@ -446,29 +446,6 @@ export default function App() {
     });
     return Object.values(map).sort((a, b) => b.totalRevenue - a.totalRevenue);
   }, [filteredData]);
-
-  const contributionTableData = useMemo(() => {
-    const data2026Only = invoices.filter((item) => item.tahun === "2026");
-    const map = {};
-    let totalRev2026 = 0;
-
-    data2026Only.forEach((row) => {
-      const sales = row.via || "Lainnya";
-      if (!map[sales]) {
-        map[sales] = 0;
-      }
-      map[sales] += row.nilaiInvoice;
-      totalRev2026 += row.nilaiInvoice;
-    });
-
-    const result = Object.keys(map).map((sales) => {
-      const rev = map[sales];
-      const kontribusi = totalRev2026 > 0 ? (rev / totalRev2026) * 100 : 0;
-      return { sales, revenue: rev, kontribusi };
-    });
-
-    return result.sort((a, b) => b.revenue - a.revenue);
-  }, [invoices]);
 
   const agingSummary = useMemo(() => {
     let current = 0;
@@ -542,7 +519,6 @@ export default function App() {
     setFilterSales("Semua sales / VIA");
     setFilterStatus("Semua status");
     setFilterJobSearch("");
-    setFilterAlokasiKas("Semua alokasi kas masuk");
   };
 
   const formatRupiah = (val) => {
@@ -676,6 +652,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab("alokasi_kas")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                activeTab === "alokasi_kas"
+                  ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-600/25 border border-red-500/30"
+                  : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Wallet className="w-4 h-4" />
+              <span>Alokasi Kas Masuk</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("trend")}
               className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
                 activeTab === "trend"
@@ -739,7 +727,7 @@ export default function App() {
             </button>
           </div>
           <div className="text-[10px] text-slate-600 text-center font-medium">
-            Secure Live Data Engine v3.2
+            Secure Live Data Engine v3.3
           </div>
         </div>
       </aside>
@@ -749,7 +737,7 @@ export default function App() {
           <div>
             <div className="text-[11px] font-bold text-red-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              LIVE SPREADSHEETS SYNC (2025 & 2026)
+              LIVE SPREADSHEETS SYNC (2025, 2026 & ALOKASI KAS)
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight">
               REVENUE & CASH IN PERFORMANCE
@@ -771,7 +759,7 @@ export default function App() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-400 tracking-wider uppercase">
               <Search className="w-3.5 h-3.5 text-red-500" />
-              <span>Filter Data & Alokasi Kas Masuk</span>
+              <span>Filter Data Master Invoice</span>
             </div>
             <button
               onClick={resetFilters}
@@ -781,7 +769,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <select
               value={filterTahun}
               onChange={(e) => setFilterTahun(e.target.value)}
@@ -856,28 +844,6 @@ export default function App() {
               <option>Belum ada Pembayaran</option>
               <option>Belum Lunas (Kurang Bayar & Belum Bayar)</option>
             </select>
-
-            {/* Filter Alokasi Kas Masuk */}
-            <select
-              value={filterAlokasiKas}
-              onChange={(e) => setFilterAlokasiKas(e.target.value)}
-              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-red-500 transition-colors"
-            >
-              <option>Semua alokasi kas masuk</option>
-              {Array.from(
-                new Set([
-                  ...alokasiKasData,
-                  ...invoices.map((i) => i.alokasiKasMasuk).filter(Boolean),
-                ])
-              )
-                .filter((x) => x && x !== "-")
-                .sort()
-                .map((val, idx) => (
-                  <option key={idx} value={val}>
-                    {val}
-                  </option>
-                ))}
-            </select>
           </div>
         </div>
 
@@ -894,7 +860,7 @@ export default function App() {
 
           <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-emerald-500 border border-slate-800 p-5 shadow-xl">
             <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
-              TOTAL CASH IN
+              TOTAL CASH IN (DANA MASUK)
             </div>
             <div className="text-xl font-black text-emerald-400">
               {formatRupiah(totalCashIn)}
@@ -903,7 +869,7 @@ export default function App() {
 
           <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border-l-4 border-l-amber-500 border border-slate-800 p-5 shadow-xl">
             <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">
-              TOTAL SISA TAGIHAN
+              TOTAL SISA TAGIHAN (PIUTANG)
             </div>
             <div className="text-xl font-black text-amber-400">
               {formatRupiah(totalSisaTagihan)}
@@ -920,220 +886,266 @@ export default function App() {
           </div>
         </div>
 
-        {/* Content Tabs */}
-        <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-6">
-          {activeTab === "overview" && (
-            <div>
-              <h2 className="text-lg font-bold text-white mb-4">Overview Dashboard</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-slate-900/80 p-5 rounded-xl border border-slate-800">
-                  <h3 className="text-sm font-bold text-white mb-3">Ringkasan Aging Piutang</h3>
-                  <ul className="space-y-2 text-xs text-slate-300">
-                    <li className="flex justify-between"><span>Current (&le; 30 Hari):</span> <span className="font-bold text-white">{formatRupiah(agingSummary.current)}</span></li>
-                    <li className="flex justify-between"><span>31 - 60 Hari:</span> <span className="font-bold text-white">{formatRupiah(agingSummary.aging31_60)}</span></li>
-                    <li className="flex justify-between"><span>61 - 120 Hari:</span> <span className="font-bold text-white">{formatRupiah(agingSummary.aging60_120)}</span></li>
-                    <li className="flex justify-between text-red-400"><span>&gt; 120 Hari (Critical):</span> <span className="font-bold">{formatRupiah(agingSummary.agingCritical120)}</span></li>
-                  </ul>
+        {/* RENDER ACTIVE TAB */}
+        {activeTab === "alokasi_kas" && (
+          <div className="space-y-6">
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-lg font-black text-white">Tab Alokasi Kas Masuk (Data Tersambung ke Google Sheets)</h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Menampilkan data riil dari sheet Alokasi Kas Masuk (gid=1728018265).
+                  </p>
                 </div>
-                <div className="bg-slate-900/80 p-5 rounded-xl border border-slate-800">
-                  <h3 className="text-sm font-bold text-white mb-3">Kontribusi Sales 2026</h3>
-                  <div className="overflow-x-auto max-h-40">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="border-b border-slate-800 text-slate-400">
-                          <th className="pb-2">Sales</th>
-                          <th className="pb-2 text-right">Revenue</th>
-                          <th className="pb-2 text-right">Kontribusi</th>
+                <div className="px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl text-xs font-bold">
+                  Total Baris Data: {alokasiKasData.length}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900 text-slate-400 uppercase font-bold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3.5">Kolom 1</th>
+                      <th className="p-3.5">Kolom 2</th>
+                      <th className="p-3.5">Kolom 3</th>
+                      <th className="p-3.5">Kolom 4</th>
+                      <th className="p-3.5 text-right">Nominal</th>
+                      <th className="p-3.5">Keterangan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-medium">
+                    {alokasiKasData.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="text-center py-8 text-slate-500 font-semibold">
+                          Memuat data atau data kosong pada sheet Alokasi Kas Masuk.
+                        </td>
+                      </tr>
+                    ) : (
+                      alokasiKasData.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-900/50 transition-colors">
+                          <td className="p-3.5 text-white">{item.kolom1}</td>
+                          <td className="p-3.5 text-slate-300">{item.kolom2}</td>
+                          <td className="p-3.5 text-slate-300">{item.kolom3}</td>
+                          <td className="p-3.5 text-slate-300">{item.kolom4}</td>
+                          <td className="p-3.5 text-right font-bold text-emerald-400">{formatRupiah(item.nominal)}</td>
+                          <td className="p-3.5 text-slate-300">{item.keterangan}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {contributionTableData.map((item, idx) => (
-                          <tr key={idx} className="border-b border-slate-800/50">
-                            <td className="py-2 text-slate-200 font-medium">{item.sales}</td>
-                            <td className="py-2 text-right text-slate-300">{formatRupiah(item.revenue)}</td>
-                            <td className="py-2 text-right text-blue-400 font-bold">{item.kontribusi.toFixed(1)}%</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+              <h2 className="text-lg font-black text-white mb-2">Overview Ringkasan Operasional</h2>
+              <p className="text-xs text-slate-400 mb-6">Analisis komprehensif performa sewa alat berat CV Chandra Delta Perkasa.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5">
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Status Pembayaran Keseluruhan</div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-300">Total Data Invoice Filtered</span>
+                      <span className="font-bold text-white">{filteredData.length} Dokumen</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-300">Total Sisa Piutang Aktif</span>
+                      <span className="font-bold text-amber-400">{formatRupiah(totalSisaTagihan)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5">
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Informasi Wilayah & Armada</div>
+                  <div className="space-y-2 text-xs text-slate-300">
+                    <p>📍 Area Layanan Utama: Makassar & Seluruh Wilayah Sulawesi</p>
+                    <p>🚜 Armada: Excavator 20 Ton, Mini Excavator, Vibro Roller, Dozer, Motor Grader, Bucket & Breaker</p>
+                    <p>📞 Kontak Resmi: 0851 6565 9907</p>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === "sales" && (
-            <div>
-              <h2 className="text-lg font-bold text-white mb-4">Sales Performance</h2>
+        {activeTab === "sales" && (
+          <div className="space-y-6">
+            <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+              <h2 className="text-lg font-black text-white mb-4">Sales Performance & Target</h2>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400">
-                      <th className="p-3">Sales / VIA</th>
-                      <th className="p-3 text-right">Total Revenue</th>
-                      <th className="p-3 text-right">Total Cash In</th>
-                      <th className="p-3 text-right">Sisa Tagihan</th>
-                      <th className="p-3 text-center">Lunas</th>
-                      <th className="p-3 text-center">Outstanding</th>
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900 text-slate-400 uppercase font-bold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3.5">Sales / VIA</th>
+                      <th className="p-3.5 text-right">Total Revenue</th>
+                      <th className="p-3.5 text-right">Total Cash In</th>
+                      <th className="p-3.5 text-right">Sisa Tagihan</th>
+                      <th className="p-3.5 text-center">Invoice Lunas</th>
+                      <th className="p-3.5 text-center">Invoice Outstanding</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {salesPerformanceData.map((row, idx) => (
-                      <tr key={idx} className="border-b border-slate-900/80 hover:bg-slate-900/50">
-                        <td className="p-3 font-bold text-white">{row.sales}</td>
-                        <td className="p-3 text-right text-slate-200">{formatRupiah(row.totalRevenue)}</td>
-                        <td className="p-3 text-right text-emerald-400">{formatRupiah(row.totalCashIn)}</td>
-                        <td className="p-3 text-right text-amber-400">{formatRupiah(row.totalSisaTagihan)}</td>
-                        <td className="p-3 text-center text-slate-300">{row.lunasCount}</td>
-                        <td className="p-3 text-center text-red-400">{row.outstandingCount}</td>
+                  <tbody className="divide-y divide-slate-800/60 font-medium">
+                    {salesPerformanceData.map((row) => (
+                      <tr key={row.sales} className="hover:bg-slate-900/50 transition-colors">
+                        <td className="p-3.5 font-bold text-white">{row.sales}</td>
+                        <td className="p-3.5 text-right text-slate-200">{formatRupiah(row.totalRevenue)}</td>
+                        <td className="p-3.5 text-right text-emerald-400">{formatRupiah(row.totalCashIn)}</td>
+                        <td className="p-3.5 text-right text-amber-400">{formatRupiah(row.totalSisaTagihan)}</td>
+                        <td className="p-3.5 text-center text-blue-400 font-bold">{row.lunasCount}</td>
+                        <td className="p-3.5 text-center text-red-400 font-bold">{row.outstandingCount}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === "trend" && (
-            <div>
-              <h2 className="text-lg font-bold text-white mb-4">Grafik Tren Bulanan ({filterTahun === "Semua tahun" ? "2026" : filterTahun})</h2>
-              <div className="space-y-3">
-                {monthlyTrendData.data.map((m, idx) => {
-                  const max = monthlyTrendData.maxVal || 1;
-                  const revPercent = Math.min(100, (m.revenue / max) * 100);
-                  return (
-                    <div key={idx} className="bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
-                      <div className="flex justify-between text-xs font-semibold mb-1">
-                        <span className="text-white w-24">{m.bulan}</span>
-                        <span className="text-blue-400">Rev: {formatRupiah(m.revenue)}</span>
-                        <span className="text-emerald-400">Cash: {formatRupiah(m.cashIn)}</span>
+        {activeTab === "trend" && (
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+            <h2 className="text-lg font-black text-white">Grafik Tren Bulanan ({filterTahun === "Semua tahun" ? "2026" : filterTahun})</h2>
+            <div className="space-y-4">
+              {monthlyTrendData.data.map((item) => {
+                const max = monthlyTrendData.maxVal || 1;
+                const revPct = Math.min(100, (item.revenue / max) * 100);
+                const cashPct = Math.min(100, (item.cashIn / max) * 100);
+                return (
+                  <div key={item.bulan} className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                    <div className="flex justify-between text-xs font-bold mb-2">
+                      <span className="text-white">{item.bulan}</span>
+                      <span className="text-slate-400">Rev: <strong className="text-white">{formatRupiah(item.revenue)}</strong> | Cash: <strong className="text-emerald-400">{formatRupiah(item.cashIn)}</strong></span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden">
+                        <div className="bg-blue-600 h-full rounded-full" style={{ width: `${revPct}%` }}></div>
                       </div>
-                      <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden flex">
-                        <div className="bg-blue-500 h-full" style={{ width: `${revPercent}%` }}></div>
+                      <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden">
+                        <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${cashPct}%` }}></div>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "aging" && (
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+            <h2 className="text-lg font-black text-white">Aging Piutang (&gt;60 / &gt;120 Hari)</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                <div className="text-xs font-bold text-slate-400 uppercase">0 - 30 Hari</div>
+                <div className="text-base font-black text-white mt-1">{formatRupiah(agingSummary.current)}</div>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                <div className="text-xs font-bold text-slate-400 uppercase">31 - 60 Hari</div>
+                <div className="text-base font-black text-blue-400 mt-1">{formatRupiah(agingSummary.aging31_60)}</div>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                <div className="text-xs font-bold text-slate-400 uppercase">61 - 120 Hari</div>
+                <div className="text-base font-black text-amber-400 mt-1">{formatRupiah(agingSummary.aging60_120)}</div>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                <div className="text-xs font-bold text-red-500/80 uppercase">&gt; 120 Hari (Critical)</div>
+                <div className="text-base font-black text-red-400 mt-1">{formatRupiah(agingSummary.agingCritical120)}</div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === "aging" && (
-            <div>
-              <h2 className="text-lg font-bold text-white mb-4">Aging Piutang (&gt;60 / &gt;120 Hari)</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <div className="text-xs text-slate-400">Current (&le;30 Hari)</div>
-                  <div className="text-lg font-bold text-white mt-1">{formatRupiah(agingSummary.current)}</div>
-                </div>
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <div className="text-xs text-slate-400">31 - 60 Hari</div>
-                  <div className="text-lg font-bold text-white mt-1">{formatRupiah(agingSummary.aging31_60)}</div>
-                </div>
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <div className="text-xs text-slate-400">61 - 120 Hari</div>
-                  <div className="text-lg font-bold text-amber-400 mt-1">{formatRupiah(agingSummary.aging60_120)}</div>
-                </div>
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <div className="text-xs text-slate-400">&gt; 120 Hari (Critical)</div>
-                  <div className="text-lg font-bold text-red-500 mt-1">{formatRupiah(agingSummary.agingCritical120)}</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "master" && (
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold text-white">Master Invoice</h2>
-                <span className="text-xs text-slate-400">Total Baris: {filteredData.length}</span>
-              </div>
-              <div className="overflow-x-auto max-h-[500px]">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="sticky top-0 bg-slate-950 z-10">
-                    <tr className="border-b border-slate-800 text-slate-400">
-                      <th className="p-3">Tahun</th>
-                      <th className="p-3">Bulan</th>
-                      <th className="p-3">No Invoice</th>
-                      <th className="p-3">Customer</th>
-                      <th className="p-3">Sales / VIA</th>
-                      <th className="p-3">Alokasi Kas Masuk</th>
-                      <th className="p-3 text-right">Nilai Invoice</th>
-                      <th className="p-3 text-right">Dana Masuk</th>
-                      <th className="p-3 text-right">Sisa Tagihan</th>
-                      <th className="p-3">Status</th>
+        {activeTab === "master" && (
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+            <h2 className="text-lg font-black text-white">Master Invoice ({filteredData.length} Data)</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900 text-slate-400 uppercase font-bold border-b border-slate-800">
+                  <tr>
+                    <th className="p-3.5">Tahun</th>
+                    <th className="p-3.5">Bulan</th>
+                    <th className="p-3.5">No. Invoice</th>
+                    <th className="p-3.5">Customer</th>
+                    <th className="p-3.5">Sales / VIA</th>
+                    <th className="p-3.5 text-right">Nilai Invoice</th>
+                    <th className="p-3.5 text-right">Dana Masuk</th>
+                    <th className="p-3.5 text-right">Sisa Tagihan</th>
+                    <th className="p-3.5 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-medium">
+                  {filteredData.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-900/50 transition-colors">
+                      <td className="p-3.5 text-slate-300">{item.tahun}</td>
+                      <td className="p-3.5 text-slate-300">{item.bulan}</td>
+                      <td className="p-3.5 font-bold text-white">{item.noInvoice}</td>
+                      <td className="p-3.5 text-slate-300">{item.customer}</td>
+                      <td className="p-3.5 text-slate-300">{item.via}</td>
+                      <td className="p-3.5 text-right text-slate-200">{formatRupiah(item.nilaiInvoice)}</td>
+                      <td className="p-3.5 text-right text-emerald-400">{formatRupiah(item.danaMasuk)}</td>
+                      <td className="p-3.5 text-right text-amber-400">{formatRupiah(item.sisaTagihan)}</td>
+                      <td className="p-3.5 text-center">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                          {item.status}
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {filteredData.map((row) => (
-                      <tr key={row.id} className="border-b border-slate-900/60 hover:bg-slate-900/40">
-                        <td className="p-3 text-slate-400">{row.tahun}</td>
-                        <td className="p-3 text-slate-300">{row.bulan}</td>
-                        <td className="p-3 font-semibold text-white">{row.noInvoice}</td>
-                        <td className="p-3 text-slate-300">{row.customer}</td>
-                        <td className="p-3 text-slate-300">{row.via}</td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded text-[10px] bg-red-950/60 text-red-400 border border-red-800/50 font-medium">
-                            {row.alokasiKasMasuk}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right text-slate-200">{formatRupiah(row.nilaiInvoice)}</td>
-                        <td className="p-3 text-right text-emerald-400">{formatRupiah(row.danaMasuk)}</td>
-                        <td className="p-3 text-right text-amber-400">{formatRupiah(row.sisaTagihan)}</td>
-                        <td className="p-3 text-slate-300">{row.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === "jobid" && (
-            <div>
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                <h2 className="text-lg font-bold text-white">Data Job ID</h2>
-                <input
-                  type="text"
-                  placeholder="Cari Job ID / Penyewa / Unit..."
-                  value={filterJobSearch}
-                  onChange={(e) => setFilterJobSearch(e.target.value)}
-                  className="bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500 w-full sm:w-64"
-                />
-              </div>
-              <div className="overflow-x-auto max-h-[500px]">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="sticky top-0 bg-slate-950 z-10">
-                    <tr className="border-b border-slate-800 text-slate-400">
-                      <th className="p-3">No</th>
-                      <th className="p-3">Job ID</th>
-                      <th className="p-3">Via</th>
-                      <th className="p-3">Jenis Sewa</th>
-                      <th className="p-3">Nama Penyewa</th>
-                      <th className="p-3">Kode Unit</th>
-                      <th className="p-3">Class</th>
-                      <th className="p-3">Lokasi Kerja</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredJobIdData.map((row) => (
-                      <tr key={row.id} className="border-b border-slate-900/60 hover:bg-slate-900/40">
-                        <td className="p-3 text-slate-400">{row.no}</td>
-                        <td className="p-3 font-bold text-white">{row.jobId}</td>
-                        <td className="p-3 text-slate-300">{row.via}</td>
-                        <td className="p-3 text-slate-300">{row.jenisSewa}</td>
-                        <td className="p-3 text-slate-200 font-medium">{row.namaPenyewa}</td>
-                        <td className="p-3 text-slate-300">{row.kodeUnit}</td>
-                        <td className="p-3 text-slate-300">{row.classUnit}</td>
-                        <td className="p-3 text-slate-300">{row.lokasiKerja}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        {activeTab === "jobid" && (
+          <div className="bg-slate-950/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+              <h2 className="text-lg font-black text-white">Database Job ID & Unit Sewa</h2>
+              <input
+                type="text"
+                placeholder="Cari Job ID / Penyewa / Unit..."
+                value={filterJobSearch}
+                onChange={(e) => setFilterJobSearch(e.target.value)}
+                className="w-full sm:w-72 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-200 font-medium focus:outline-none focus:border-red-500"
+              />
             </div>
-          )}
-        </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900 text-slate-400 uppercase font-bold border-b border-slate-800">
+                  <tr>
+                    <th className="p-3.5">No</th>
+                    <th className="p-3.5">Job ID</th>
+                    <th className="p-3.5">VIA</th>
+                    <th className="p-3.5">Jenis Sewa</th>
+                    <th className="p-3.5">Nama Penyewa</th>
+                    <th className="p-3.5">Kode Unit</th>
+                    <th className="p-3.5">Class</th>
+                    <th className="p-3.5">Lokasi Kerja</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-medium">
+                  {filteredJobIdData.map((job) => (
+                    <tr key={job.id} className="hover:bg-slate-900/50 transition-colors">
+                      <td className="p-3.5 text-slate-400">{job.no}</td>
+                      <td className="p-3.5 font-bold text-white">{job.jobId}</td>
+                      <td className="p-3.5 text-slate-300">{job.via}</td>
+                      <td className="p-3.5 text-slate-300">{job.jenisSewa}</td>
+                      <td className="p-3.5 text-slate-300">{job.namaPenyewa}</td>
+                      <td className="p-3.5 text-slate-300">{job.kodeUnit}</td>
+                      <td className="p-3.5 text-slate-300">{job.classUnit}</td>
+                      <td className="p-3.5 text-slate-300">{job.lokasiKerja}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
