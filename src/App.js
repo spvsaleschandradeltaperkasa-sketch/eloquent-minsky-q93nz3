@@ -20,6 +20,9 @@ const URL_2026 =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
 const URL_JOB_ID =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=1656309510&single=true&output=csv";
+// URL khusus Alokasi Kas Masuk baru (gid=1728018265)
+const URL_KAS_MASUK =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=1728018265&single=true&output=csv";
 
 const MONTHS_ORDER = [
   "JANUARI",
@@ -52,6 +55,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("sales");
   const [invoices, setInvoices] = useState([]);
   const [jobIdData, setJobIdData] = useState([]);
+  const [kasMasukData, setKasMasukData] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const [filterTahun, setFilterTahun] = useState("2026");
@@ -61,6 +65,7 @@ export default function App() {
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
   const [filterJobSearch, setFilterJobSearch] = useState("");
+  const [filterKasSearch, setFilterKasSearch] = useState("");
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -177,12 +182,67 @@ export default function App() {
         sisaTagihan: sisa,
         status: cleanStr(cols[16]) || "Belum ada Pembayaran",
         agingDays: agingDays,
-        // Pemetaan indeks kolom Kas Masuk yang akurat:
-        kodeKasMasuk: cleanStr(cols[10]) || "-",       // Kolom Kode Kas Masuk (index 10)
-        tanggalKasMasuk: cleanStr(cols[11]) || "-",    // Kolom Tanggal Kas Masuk (index 11)
-        rekening: cleanStr(cols[12]) || "-",           // Kolom Rekening (index 12)
-        keteranganKas: cleanStr(cols[13]) || "-",      // Kolom Keterangan Kas Masuk (index 13)
-        jumlahKasMasuk: cleanNum(cols[15]),            // Kolom Jumlah Kas Masuk (index 15)
+      });
+    }
+    return result;
+  };
+
+  const parseKasMasukCSV = (text) => {
+    const lines = text.split(/\r\n|\n/);
+    if (lines.length < 2) return [];
+    const result = [];
+    const parseLine = (str) => {
+      const arr = [];
+      let quote = false;
+      let col = "";
+      for (let c of str) {
+        if (c === '"') {
+          quote = !quote;
+        } else if (c === "," && !quote) {
+          arr.push(col.trim());
+          col = "";
+        } else {
+          col += c;
+        }
+      }
+      arr.push(col.trim());
+      return arr;
+    };
+
+    const cleanNum = (val) => {
+      if (!val) return 0;
+      let s = val.replace(/"/g, "").trim();
+      if (s === "-" || s === "") return 0;
+      if (s.includes(".")) {
+        s = s.replace(/\./g, "").replace(",", ".");
+      } else {
+        s = s.replace(",", ".");
+      }
+      return parseFloat(s) || 0;
+    };
+
+    const cleanStr = (val) => (val ? val.replace(/^"|"$/g, "").trim() : "");
+
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const cols = parseLine(lines[i]);
+
+      const kodeKas = cleanStr(cols[10]) || "-";
+      const tglKas = cleanStr(cols[11]) || "-";
+      const rek = cleanStr(cols[12]) || "-";
+      const ket = cleanStr(cols[13]) || "-";
+      const jmlKas = cleanNum(cols[15]);
+
+      if (kodeKas === "-" && ket === "-" && jmlKas === 0) continue;
+
+      result.push({
+        id: `kas-${i}`,
+        no: i,
+        kodeKasMasuk: kodeKas,
+        tanggalKasMasuk: tglKas,
+        rekening: rek,
+        keteranganKas: ket,
+        jumlahKasMasuk: jmlKas,
       });
     }
     return result;
@@ -265,6 +325,13 @@ export default function App() {
         const parsedJob = parseJobIdCSV(textJob);
         setJobIdData(parsedJob);
       }
+
+      if (URL_KAS_MASUK) {
+        const resKas = await fetch(URL_KAS_MASUK);
+        const textKas = await resKas.text();
+        const parsedKas = parseKasMasukCSV(textKas);
+        setKasMasukData(parsedKas);
+      }
     } catch (err) {
       console.error("Gagal mengambil data:", err);
     } finally {
@@ -343,6 +410,17 @@ export default function App() {
         j.via.toLowerCase().includes(filterJobSearch.toLowerCase())
     );
   }, [jobIdData, filterJobSearch]);
+
+  const filteredKasMasukData = useMemo(() => {
+    if (!filterKasSearch) return kasMasukData;
+    return kasMasukData.filter(
+      (k) =>
+        k.kodeKasMasuk.toLowerCase().includes(filterKasSearch.toLowerCase()) ||
+        k.tanggalKasMasuk.toLowerCase().includes(filterKasSearch.toLowerCase()) ||
+        k.rekening.toLowerCase().includes(filterKasSearch.toLowerCase()) ||
+        k.keteranganKas.toLowerCase().includes(filterKasSearch.toLowerCase())
+    );
+  }, [kasMasukData, filterKasSearch]);
 
   const salesPerformanceData = useMemo(() => {
     const map = {};
@@ -476,6 +554,7 @@ export default function App() {
     setFilterSales("Semua sales / VIA");
     setFilterStatus("Semua status");
     setFilterJobSearch("");
+    setFilterKasSearch("");
   };
 
   const formatRupiah = (val) => {
@@ -632,7 +711,7 @@ export default function App() {
               <span>Aging Piutang (&gt;60 / &gt;120 Hari)</span>
             </button>
 
-            {/* TAB ALOKASI KAS MASUK */}
+            {/* TAB ALOKASI KAS MASUK (Live dari URL GID 1728018265) */}
             <button
               onClick={() => setActiveTab("kasmasuk")}
               className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
@@ -685,7 +764,7 @@ export default function App() {
             </button>
           </div>
           <div className="text-[10px] text-slate-600 text-center font-medium">
-            Secure Live Data Engine v3.2
+            Secure Live Data Engine v3.3
           </div>
         </div>
       </aside>
@@ -695,7 +774,7 @@ export default function App() {
           <div>
             <div className="text-[11px] font-bold text-red-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              LIVE SPREADSHEETS SYNC (2025 & 2026)
+              LIVE SPREADSHEETS SYNC (2025, 2026, JOB ID & KAS MASUK)
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight">
               REVENUE & CASH IN PERFORMANCE
@@ -855,13 +934,21 @@ export default function App() {
                   Monitoring Alokasi Kas Masuk
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Menampilkan rincian kas masuk, rekening, dan alokasi pembayaran per transaksi.
+                  Menampilkan rincian kas masuk, rekening, dan alokasi pembayaran per transaksi (Live GID 1728018265).
                 </p>
               </div>
               <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-3.5 py-2 rounded-xl">
-                Total Baris: {filteredData.length} Data
+                Total Baris: {filteredKasMasukData.length} Data
               </div>
             </div>
+
+            <input
+              type="text"
+              placeholder="Cari Kode Kas, Tanggal, Rekening, atau Keterangan..."
+              value={filterKasSearch}
+              onChange={(e) => setFilterKasSearch(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-200 mb-4 focus:outline-none focus:border-red-500"
+            />
 
             <div className="overflow-x-auto rounded-xl border border-slate-800">
               <table className="w-full text-left text-xs text-slate-300">
@@ -876,14 +963,14 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {filteredData.length === 0 ? (
+                  {filteredKasMasukData.length === 0 ? (
                     <tr>
                       <td colSpan="6" className="text-center py-8 text-slate-500">
-                        Tidak ada data kas masuk yang sesuai dengan filter.
+                        Tidak ada data kas masuk yang sesuai dengan pencarian.
                       </td>
                     </tr>
                   ) : (
-                    filteredData.map((row, index) => (
+                    filteredKasMasukData.map((row, index) => (
                       <tr key={row.id} className="hover:bg-slate-900/50 transition-colors">
                         <td className="px-4 py-3 font-medium text-slate-400">{index + 1}</td>
                         <td className="px-4 py-3 font-semibold text-white">{row.kodeKasMasuk}</td>
