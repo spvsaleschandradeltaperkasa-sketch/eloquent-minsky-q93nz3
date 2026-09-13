@@ -85,41 +85,6 @@ export default function App() {
     setCurrentUser("");
   };
 
-  const getSalesTargets = (tahun, bulan) => {
-    let cdpRev = 2000000000;
-    let cdpCash = 2000000000;
-
-    if (tahun === "2026" && bulan !== "Semua bulan") {
-      const monthIndex = MONTHS_ORDER.indexOf(bulan.toUpperCase());
-      const sepIndex = MONTHS_ORDER.indexOf("SEPTEMBER");
-
-      if (monthIndex >= sepIndex) {
-        cdpRev = 4000000000;
-        cdpCash = 4000000000;
-      }
-    }
-
-    return {
-      CDP: { revenue: cdpRev, cashIn: cdpCash },
-      ANS: {
-        revenue: 900000000,
-        cashIn: 800000000,
-        isCombined: true,
-        combinedWith: ["ANS", "FAN"],
-      },
-      FAN: {
-        revenue: 900000000,
-        cashIn: 800000000,
-        isCombined: true,
-        combinedWith: ["ANS", "FAN"],
-      },
-    };
-  };
-
-  const activeTargets = useMemo(() => {
-    return getSalesTargets(filterTahun, filterBulan);
-  }, [filterTahun, filterBulan]);
-
   const parseCSV = (text, defaultYear) => {
     const lines = text.split(/\r\n|\n/);
     if (lines.length < 2) return [];
@@ -185,19 +150,18 @@ export default function App() {
       if (!lines[i].trim()) continue;
       const cols = parseLine(lines[i]);
 
-      const colTahun = cleanStr(cols[0]);
-      const colVia = cleanStr(cols[1]);
-      const colVia2 = cleanStr(cols[23]);
-      const noInv = cleanStr(cols[3]);
-      const cust = cleanStr(cols[5]);
-      const colMonth = cleanStr(cols[21]);
+      const colTahun = cleanStr(cols[3]);
+      const colVia = cleanStr(cols[4]);
+      const noInv = cleanStr(cols[5]);
+      const cust = cleanStr(cols[8]);
+      const colMonth = cleanStr(cols[0]);
       const colDate = cleanStr(cols[4]);
 
       if (!noInv && !cust) continue;
 
       const thn = colTahun ? colTahun.replace(".0", "") : defaultYear;
-      const salesName = colVia2 || colVia || "-";
-      const sisa = cleanNum(cols[15]);
+      const salesName = colVia || "-";
+      const sisa = cleanNum(cols[16]);
       const agingDays = sisa > 0 ? calculateAgingDays(colDate, thn, colMonth) : 0;
 
       result.push({
@@ -209,15 +173,16 @@ export default function App() {
         tanggal: colDate || "-",
         customer: cust || "Unspecified Customer",
         nilaiInvoice: cleanNum(cols[10]),
-        danaMasuk: cleanNum(cols[13]),
+        danaMasuk: cleanNum(cols[15]),
         sisaTagihan: sisa,
         status: cleanStr(cols[16]) || "Belum ada Pembayaran",
         agingDays: agingDays,
-        kodeKasMasuk: cleanStr(cols[10]) || "-",
-        tanggalKasMasuk: cleanStr(cols[11]) || "-",
-        rekening: cleanStr(cols[12]) || "-",
-        keteranganKas: cleanStr(cols[13]) || "-",
-        jumlahKasMasuk: cleanNum(cols[15]),
+        // Pemetaan indeks kolom Kas Masuk yang akurat:
+        kodeKasMasuk: cleanStr(cols[10]) || "-",       // Kolom Kode Kas Masuk (index 10)
+        tanggalKasMasuk: cleanStr(cols[11]) || "-",    // Kolom Tanggal Kas Masuk (index 11)
+        rekening: cleanStr(cols[12]) || "-",           // Kolom Rekening (index 12)
+        keteranganKas: cleanStr(cols[13]) || "-",      // Kolom Keterangan Kas Masuk (index 13)
+        jumlahKasMasuk: cleanNum(cols[15]),            // Kolom Jumlah Kas Masuk (index 15)
       });
     }
     return result;
@@ -254,9 +219,7 @@ export default function App() {
       const viaVal = cleanStr(cols[8]) || "-";
       const jenisSewaVal = cleanStr(cols[9]) || "-";
       const namaPenyewaVal = cleanStr(cols[10]) || "-";
-      const jenisPenyewaVal = cleanStr(cols[11]) || "-";
       const kodeUnitVal = cleanStr(cols[12]) || "-";
-      const classVal = cleanStr(cols[15]) || "-";
       const lokasiKerjaVal = cleanStr(cols[18]) || "-";
 
       if (jobIdVal === "-" && namaPenyewaVal === "-") continue;
@@ -268,9 +231,7 @@ export default function App() {
         via: viaVal,
         jenisSewa: jenisSewaVal,
         namaPenyewa: namaPenyewaVal,
-        jenisPenyewa: jenisPenyewaVal,
         kodeUnit: kodeUnitVal,
-        classUnit: classVal,
         lokasiKerja: lokasiKerjaVal,
       });
     }
@@ -382,21 +343,6 @@ export default function App() {
         j.via.toLowerCase().includes(filterJobSearch.toLowerCase())
     );
   }, [jobIdData, filterJobSearch]);
-
-  const combinedAnsFanData = useMemo(() => {
-    const ansFanInvoices = filteredData.filter((row) =>
-      ["ANS", "FAN"].includes(row.via.toUpperCase())
-    );
-    const revenue = ansFanInvoices.reduce(
-      (acc, curr) => acc + curr.nilaiInvoice,
-      0
-    );
-    const cashIn = ansFanInvoices.reduce(
-      (acc, curr) => acc + curr.danaMasuk,
-      0
-    );
-    return { revenue, cashIn };
-  }, [filteredData]);
 
   const salesPerformanceData = useMemo(() => {
     const map = {};
@@ -686,7 +632,7 @@ export default function App() {
               <span>Aging Piutang (&gt;60 / &gt;120 Hari)</span>
             </button>
 
-            {/* TAB TAMBAHAN ALOKASI KAS MASUK */}
+            {/* TAB ALOKASI KAS MASUK */}
             <button
               onClick={() => setActiveTab("kasmasuk")}
               className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
