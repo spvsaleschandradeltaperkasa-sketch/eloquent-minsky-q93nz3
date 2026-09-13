@@ -16,6 +16,9 @@ import {
   Briefcase,
   ChevronRight,
   Gauge,
+  Wallet,
+  Landmark,
+  Plus,
 } from "lucide-react";
 
 const URL_2025 =
@@ -24,6 +27,8 @@ const URL_2026 =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=586995800&single=true&output=csv";
 const URL_JOB_ID =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=1656309510&single=true&output=csv";
+const URL_ALOKASI_KAS =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTo9EJbez7MyWXlYkXc-rzoN8vqYa1SEyC_ffeObmb0Nq9D6hTAzdS1rbZ6_OnnYntvAYYoTIMQu03C/pub?gid=1728018265&single=true&output=csv";
 
 const MONTHS_ORDER = [
   "JANUARI",
@@ -41,6 +46,7 @@ const MONTHS_ORDER = [
 ];
 
 const MONTHS_SHORT = ["JAN","FEB","MAR","APR","MEI","JUN","JUL","AGU","SEP","OKT","NOV","DES"];
+const MONTH_ID_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 
 const ALLOWED_USERS = [
   { username: "admin", password: "123", role: "Administrator" },
@@ -98,6 +104,14 @@ export default function App() {
   const [filterSales, setFilterSales] = useState("Semua sales / VIA");
   const [filterStatus, setFilterStatus] = useState("Semua status");
   const [filterJobSearch, setFilterJobSearch] = useState("");
+
+  const [alokasiKasData, setAlokasiKasData] = useState([]);
+  const [filterKasTahun, setFilterKasTahun] = useState("2026");
+  const [filterKasBulan, setFilterKasBulan] = useState("Semua bulan");
+  const [filterKasJenis, setFilterKasJenis] = useState("Semua jenis");
+  const [filterKasRekening, setFilterKasRekening] = useState("Semua rekening");
+  const [filterKasSearch, setFilterKasSearch] = useState("");
+  const [kasVisibleCount, setKasVisibleCount] = useState(100);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -294,6 +308,85 @@ export default function App() {
     return result;
   };
 
+  const parseAlokasiKasCSV = (text) => {
+    const lines = text.split(/\r\n|\n/);
+    if (lines.length < 2) return [];
+    const result = [];
+    const parseLine = (str) => {
+      const arr = [];
+      let quote = false;
+      let col = "";
+      for (let c of str) {
+        if (c === '"') {
+          quote = !quote;
+        } else if (c === "," && !quote) {
+          arr.push(col.trim());
+          col = "";
+        } else {
+          col += c;
+        }
+      }
+      arr.push(col.trim());
+      return arr;
+    };
+    const cleanStr = (val) => (val ? val.replace(/^"|"$/g, "").trim() : "");
+    const cleanNum = (val) => {
+      if (!val) return 0;
+      let s = val.replace(/"/g, "").trim();
+      if (s === "-" || s === "") return 0;
+      if (s.includes(".")) {
+        s = s.replace(/\./g, "").replace(",", ".");
+      } else {
+        s = s.replace(",", ".");
+      }
+      return parseFloat(s) || 0;
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const cols = parseLine(lines[i]);
+
+      let bulan = cleanStr(cols[17]) || cleanStr(cols[0]) || "-";
+      if (bulan !== "-" && bulan.length === 1) bulan = "0" + bulan;
+      const tahun = cleanStr(cols[18]) || cleanStr(cols[3]) || "-";
+      const jenisAlokasi = cleanStr(cols[4]) || "Lainnya";
+      const invoiceNumber = cleanStr(cols[5]) || "-";
+      const jobId = cleanStr(cols[6]) || "-";
+      const noUnit = cleanStr(cols[7]) || "-";
+      const namaKonsumen = cleanStr(cols[8]) || "Unspecified";
+      const alamat = cleanStr(cols[9]) || "-";
+      const kodeKasMasuk = cleanStr(cols[10]) || "-";
+      const tanggalKasMasuk = cleanStr(cols[11]) || "-";
+      const rekening = cleanStr(cols[12]) || "-";
+      const keterangan = cleanStr(cols[13]) || "-";
+      const jumlahAlokasi = cleanNum(cols[14]);
+      const jumlahKasMasuk = cleanNum(cols[15]);
+      const sisaKasMasuk = cleanNum(cols[16]);
+
+      if (kodeKasMasuk === "-" && namaKonsumen === "Unspecified" && jumlahAlokasi === 0) continue;
+
+      result.push({
+        id: `kas-${i}`,
+        bulan,
+        tahun,
+        jenisAlokasi,
+        invoiceNumber,
+        jobId,
+        noUnit,
+        namaKonsumen,
+        alamat,
+        kodeKasMasuk,
+        tanggalKasMasuk,
+        rekening,
+        keterangan,
+        jumlahAlokasi,
+        jumlahKasMasuk,
+        sisaKasMasuk,
+      });
+    }
+    return result;
+  };
+
   const fetchGoogleSheetsData = async () => {
     setLoading(true);
     try {
@@ -315,6 +408,12 @@ export default function App() {
         const resJob = await fetch(URL_JOB_ID);
         const textJob = await resJob.text();
         setJobIdData(parseJobIdCSV(textJob));
+      }
+
+      if (URL_ALOKASI_KAS) {
+        const resKas = await fetch(URL_ALOKASI_KAS);
+        const textKas = await resKas.text();
+        setAlokasiKasData(parseAlokasiKasCSV(textKas));
       }
     } catch (err) {
       console.error("Gagal mengambil data:", err);
@@ -456,6 +555,101 @@ export default function App() {
     return { data: result, maxVal };
   }, [invoices, filterTahun]);
 
+  const kasJenisOptions = useMemo(() => {
+    const set = new Set(alokasiKasData.map((i) => i.jenisAlokasi).filter(Boolean));
+    return Array.from(set).sort();
+  }, [alokasiKasData]);
+
+  const kasRekeningOptions = useMemo(() => {
+    const set = new Set(alokasiKasData.map((i) => i.rekening).filter(Boolean));
+    return Array.from(set).sort();
+  }, [alokasiKasData]);
+
+  const filteredKasData = useMemo(() => {
+    return alokasiKasData.filter((item) => {
+      if (filterKasTahun !== "Semua tahun" && item.tahun !== filterKasTahun) return false;
+      if (filterKasBulan !== "Semua bulan") {
+        const idx = MONTH_ID_NAMES.indexOf(filterKasBulan);
+        const code = idx >= 0 ? String(idx + 1).padStart(2, "0") : null;
+        if (code && item.bulan !== code) return false;
+      }
+      if (filterKasJenis !== "Semua jenis" && item.jenisAlokasi !== filterKasJenis) return false;
+      if (filterKasRekening !== "Semua rekening" && item.rekening !== filterKasRekening) return false;
+      if (filterKasSearch) {
+        const q = filterKasSearch.toLowerCase();
+        const hay = `${item.invoiceNumber} ${item.namaKonsumen} ${item.jobId} ${item.noUnit} ${item.kodeKasMasuk}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [alokasiKasData, filterKasTahun, filterKasBulan, filterKasJenis, filterKasRekening, filterKasSearch]);
+
+  const kasSummary = useMemo(() => {
+    let totalAlokasi = 0;
+    const txMap = new Map();
+    filteredKasData.forEach((item) => {
+      totalAlokasi += item.jumlahAlokasi;
+      if (item.kodeKasMasuk !== "-" && !txMap.has(item.kodeKasMasuk)) {
+        txMap.set(item.kodeKasMasuk, { jumlahKasMasuk: item.jumlahKasMasuk, sisaKasMasuk: item.sisaKasMasuk });
+      }
+    });
+    let totalKasMasuk = 0;
+    let totalSisa = 0;
+    txMap.forEach((v) => {
+      totalKasMasuk += v.jumlahKasMasuk;
+      totalSisa += v.sisaKasMasuk;
+    });
+    return { totalAlokasi, totalKasMasuk, totalSisa, totalTransaksi: txMap.size };
+  }, [filteredKasData]);
+
+  const kasByJenis = useMemo(() => {
+    const map = {};
+    filteredKasData.forEach((item) => {
+      const key = item.jenisAlokasi || "Lainnya";
+      map[key] = (map[key] || 0) + item.jumlahAlokasi;
+    });
+    const total = Object.values(map).reduce((a, b) => a + b, 0);
+    return Object.entries(map)
+      .map(([jenis, val]) => ({ jenis, val, pct: total > 0 ? (val / total) * 100 : 0 }))
+      .sort((a, b) => b.val - a.val)
+      .slice(0, 8);
+  }, [filteredKasData]);
+
+  const kasByRekening = useMemo(() => {
+    const map = {};
+    filteredKasData.forEach((item) => {
+      const key = item.rekening || "-";
+      map[key] = (map[key] || 0) + item.jumlahAlokasi;
+    });
+    return Object.entries(map)
+      .map(([rekening, val]) => ({ rekening, val }))
+      .sort((a, b) => b.val - a.val)
+      .slice(0, 8);
+  }, [filteredKasData]);
+
+  const kasMonthlyTrend = useMemo(() => {
+    const targetYear = filterKasTahun === "Semua tahun" ? "2026" : filterKasTahun;
+    const map = {};
+    MONTHS_ORDER.forEach((m, idx) => (map[String(idx + 1).padStart(2, "0")] = 0));
+    alokasiKasData.forEach((item) => {
+      if (item.tahun === targetYear && map[item.bulan] !== undefined) {
+        map[item.bulan] += item.jumlahAlokasi;
+      }
+    });
+    let maxVal = 1000000;
+    const result = MONTHS_ORDER.map((m, idx) => {
+      const code = String(idx + 1).padStart(2, "0");
+      const val = map[code];
+      if (val > maxVal) maxVal = val;
+      return { bulan: m, short: MONTHS_SHORT[idx], val };
+    });
+    return { data: result, maxVal };
+  }, [alokasiKasData, filterKasTahun]);
+
+  useEffect(() => {
+    setKasVisibleCount(100);
+  }, [filterKasTahun, filterKasBulan, filterKasJenis, filterKasRekening, filterKasSearch]);
+
   const totalRevenue = useMemo(() => filteredData.reduce((acc, curr) => acc + curr.nilaiInvoice, 0), [filteredData]);
   const totalCashIn = useMemo(() => filteredData.reduce((acc, curr) => acc + curr.danaMasuk, 0), [filteredData]);
   const totalSisaTagihan = useMemo(() => filteredData.reduce((acc, curr) => acc + curr.sisaTagihan, 0), [filteredData]);
@@ -469,6 +663,11 @@ export default function App() {
     setFilterSales("Semua sales / VIA");
     setFilterStatus("Semua status");
     setFilterJobSearch("");
+    setFilterKasTahun("2026");
+    setFilterKasBulan("Semua bulan");
+    setFilterKasJenis("Semua jenis");
+    setFilterKasRekening("Semua rekening");
+    setFilterKasSearch("");
   };
 
   const formatRupiah = (val) =>
@@ -488,6 +687,7 @@ export default function App() {
     { id: "aging", label: "Aging Piutang", icon: Clock },
     { id: "master", label: "Master Invoice", icon: FileText },
     { id: "jobid", label: "Job ID", icon: Briefcase },
+    { id: "kasmasuk", label: "Alokasi Kas Masuk", icon: Wallet },
   ];
 
   // ---------------- LOGIN ----------------
@@ -1185,6 +1385,248 @@ export default function App() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* ALOKASI KAS MASUK */}
+          {activeTab === "kasmasuk" && (
+            <div className="space-y-6">
+              {/* Local filter bar */}
+              <div className="border" style={{ borderColor: C.border, background: C.panel }}>
+                <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: C.border }}>
+                  <div className="flex items-center gap-2 text-[11px] font-medium" style={{ color: C.textDim }}>
+                    <Landmark className="w-3.5 h-3.5" style={{ color: C.accent }} />
+                    Filter alokasi kas masuk
+                  </div>
+                  <button
+                    onClick={() => {
+                      setFilterKasTahun("2026");
+                      setFilterKasBulan("Semua bulan");
+                      setFilterKasJenis("Semua jenis");
+                      setFilterKasRekening("Semua rekening");
+                      setFilterKasSearch("");
+                    }}
+                    className="flex items-center gap-1.5 text-[11px] font-medium transition-colors"
+                    style={{ color: C.textDim }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = C.text)}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = C.textDim)}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Reset
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x" style={{ borderColor: C.border }}>
+                  <select
+                    value={filterKasTahun}
+                    onChange={(e) => setFilterKasTahun(e.target.value)}
+                    className="bg-transparent px-4 py-3 text-xs font-medium outline-none cursor-pointer"
+                    style={{ color: C.text }}
+                  >
+                    {["Semua tahun", "2026", "2025", "2024", "2023"].map((o) => (
+                      <option key={o} style={{ background: C.panel }}>{o}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={filterKasBulan}
+                    onChange={(e) => setFilterKasBulan(e.target.value)}
+                    className="bg-transparent px-4 py-3 text-xs font-medium outline-none cursor-pointer"
+                    style={{ color: C.text }}
+                  >
+                    {["Semua bulan", ...MONTH_ID_NAMES].map((o) => (
+                      <option key={o} style={{ background: C.panel }}>{o}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={filterKasJenis}
+                    onChange={(e) => setFilterKasJenis(e.target.value)}
+                    className="bg-transparent px-4 py-3 text-xs font-medium outline-none cursor-pointer"
+                    style={{ color: C.text }}
+                  >
+                    {["Semua jenis", ...kasJenisOptions].map((o) => (
+                      <option key={o} style={{ background: C.panel }}>{o}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={filterKasRekening}
+                    onChange={(e) => setFilterKasRekening(e.target.value)}
+                    className="bg-transparent px-4 py-3 text-xs font-medium outline-none cursor-pointer"
+                    style={{ color: C.text }}
+                  >
+                    {["Semua rekening", ...kasRekeningOptions].map((o) => (
+                      <option key={o} style={{ background: C.panel }}>{o}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Cari invoice / konsumen / job ID"
+                    value={filterKasSearch}
+                    onChange={(e) => setFilterKasSearch(e.target.value)}
+                    className="bg-transparent px-4 py-3 text-xs font-medium outline-none placeholder:opacity-60"
+                    style={{ color: C.text }}
+                  />
+                </div>
+              </div>
+
+              {/* KPI strip */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 lg:divide-x border" style={{ borderColor: C.border, background: C.panel }}>
+                <div className="px-5 py-5">
+                  <div className="text-[10px] font-medium mb-2" style={{ color: C.textFaint }}>Total Kas Masuk Dialokasikan</div>
+                  <div className="text-xl font-semibold font-mono" style={{ color: C.green }}>{formatRupiah(kasSummary.totalAlokasi)}</div>
+                </div>
+                <div className="px-5 py-5">
+                  <div className="text-[10px] font-medium mb-2" style={{ color: C.textFaint }}>Jumlah Transaksi Kas Masuk</div>
+                  <div className="text-xl font-semibold font-mono">{kasSummary.totalTransaksi.toLocaleString("id-ID")}</div>
+                </div>
+                <div className="px-5 py-5">
+                  <div className="text-[10px] font-medium mb-2" style={{ color: C.textFaint }}>Sisa Belum Dialokasikan</div>
+                  <div className="text-xl font-semibold font-mono" style={{ color: C.amber }}>{formatRupiah(kasSummary.totalSisa)}</div>
+                </div>
+                <div className="px-5 py-5">
+                  <div className="text-[10px] font-medium mb-2" style={{ color: C.textFaint }}>Baris Alokasi Tersaring</div>
+                  <div className="text-xl font-semibold font-mono">{filteredKasData.length.toLocaleString("id-ID")}</div>
+                </div>
+              </div>
+
+              {/* Breakdown: jenis alokasi + rekening */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="border" style={{ borderColor: C.border, background: C.panel }}>
+                  <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: C.border }}>
+                    <PieChart className="w-4 h-4" style={{ color: C.accent }} />
+                    <h2 className="text-xs font-semibold">Alokasi per jenis</h2>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {kasByJenis.length === 0 ? (
+                      <div className="text-xs" style={{ color: C.textFaint }}>Tidak ada data pada filter ini.</div>
+                    ) : (
+                      kasByJenis.map((row) => (
+                        <div key={row.jenis} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-semibold">{row.jenis}</span>
+                            <span className="font-mono" style={{ color: C.accent }}>{row.pct.toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full h-1.5" style={{ background: C.panelAlt }}>
+                            <div className="h-full" style={{ width: `${Math.min(100, row.pct)}%`, background: C.accent }} />
+                          </div>
+                          <div className="text-[10px] font-mono" style={{ color: C.textFaint }}>{formatRupiah(row.val)}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="border" style={{ borderColor: C.border, background: C.panel }}>
+                  <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: C.border }}>
+                    <Landmark className="w-4 h-4" style={{ color: C.steel }} />
+                    <h2 className="text-xs font-semibold">Alokasi per rekening</h2>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {kasByRekening.length === 0 ? (
+                      <div className="text-xs" style={{ color: C.textFaint }}>Tidak ada data pada filter ini.</div>
+                    ) : (
+                      kasByRekening.map((row) => {
+                        const maxVal = kasByRekening[0]?.val || 1;
+                        const pct = (row.val / maxVal) * 100;
+                        return (
+                          <div key={row.rekening} className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="font-semibold">{row.rekening}</span>
+                              <span className="font-mono" style={{ color: C.steel }}>{formatRupiah(row.val)}</span>
+                            </div>
+                            <div className="w-full h-1.5" style={{ background: C.panelAlt }}>
+                              <div className="h-full" style={{ width: `${Math.min(100, pct)}%`, background: C.steel }} />
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Monthly trend */}
+              <div className="border" style={{ borderColor: C.border, background: C.panel }}>
+                <div className="flex items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: C.border }}>
+                  <h2 className="text-sm font-semibold">
+                    Tren kas masuk bulanan — {filterKasTahun === "Semua tahun" ? "2026 (default)" : filterKasTahun}
+                  </h2>
+                  <span className="text-xs" style={{ color: C.textFaint }}>Jumlah alokasi per bulan</span>
+                </div>
+                <div className="p-5 space-y-3">
+                  {kasMonthlyTrend.data.map((item) => {
+                    const width = (item.val / kasMonthlyTrend.maxVal) * 100;
+                    return (
+                      <div key={item.bulan} className="flex items-center gap-4">
+                        <div className="w-9 text-[11px] font-mono font-semibold shrink-0" style={{ color: C.textDim }}>{item.short}</div>
+                        <div className="flex-1">
+                          <div className="w-full h-2" style={{ background: C.panelAlt }}>
+                            <div className="h-full" style={{ width: `${Math.min(100, width)}%`, background: C.green }} />
+                          </div>
+                        </div>
+                        <div className="w-36 shrink-0 text-right text-[10px] font-mono" style={{ color: C.green }}>
+                          {formatRupiah(item.val)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="border" style={{ borderColor: C.border, background: C.panel }}>
+                <div className="flex items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: C.border }}>
+                  <h2 className="text-sm font-semibold">Rincian alokasi kas masuk — {filteredKasData.length.toLocaleString("id-ID")}</h2>
+                  <span className="text-xs" style={{ color: C.textFaint }}>Live synchronized</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b" style={{ borderColor: C.border, color: C.textFaint }}>
+                        <th className="px-4 py-2.5 font-medium">Tanggal</th>
+                        <th className="px-4 py-2.5 font-medium">Invoice</th>
+                        <th className="px-4 py-2.5 font-medium">Konsumen</th>
+                        <th className="px-4 py-2.5 font-medium">Job ID / Unit</th>
+                        <th className="px-4 py-2.5 font-medium">Jenis</th>
+                        <th className="px-4 py-2.5 font-medium">Rekening</th>
+                        <th className="px-4 py-2.5 font-medium">Jumlah Alokasi</th>
+                        <th className="px-4 py-2.5 font-medium">Sisa Kas Masuk</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <tr><td colSpan="8" className="px-4 py-8 text-center" style={{ color: C.textFaint }}>Memuat data alokasi kas masuk dari Google Sheets…</td></tr>
+                      ) : filteredKasData.length === 0 ? (
+                        <tr><td colSpan="8" className="px-4 py-8 text-center" style={{ color: C.textFaint }}>Tidak ada data alokasi kas masuk yang sesuai dengan filter.</td></tr>
+                      ) : (
+                        filteredKasData.slice(0, kasVisibleCount).map((item) => (
+                          <tr key={item.id} className="border-b" style={{ borderColor: C.border }}>
+                            <td className="px-4 py-2.5 font-mono" style={{ color: C.textFaint }}>{item.tanggalKasMasuk}</td>
+                            <td className="px-4 py-2.5 font-mono font-semibold">{item.invoiceNumber}</td>
+                            <td className="px-4 py-2.5" style={{ color: C.textDim }}>{item.namaKonsumen}</td>
+                            <td className="px-4 py-2.5 font-mono text-[11px]" style={{ color: C.accent }}>
+                              {item.jobId !== "-" ? item.jobId : item.noUnit}
+                            </td>
+                            <td className="px-4 py-2.5">{item.jenisAlokasi}</td>
+                            <td className="px-4 py-2.5" style={{ color: C.steel }}>{item.rekening}</td>
+                            <td className="px-4 py-2.5 font-mono font-semibold" style={{ color: C.green }}>{formatRupiah(item.jumlahAlokasi)}</td>
+                            <td className="px-4 py-2.5 font-mono" style={{ color: item.sisaKasMasuk > 0 ? C.amber : C.textFaint }}>{formatRupiah(item.sisaKasMasuk)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {filteredKasData.length > kasVisibleCount && (
+                  <div className="px-5 py-3.5 border-t flex justify-center" style={{ borderColor: C.border }}>
+                    <button
+                      onClick={() => setKasVisibleCount((c) => c + 100)}
+                      className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 transition-opacity hover:opacity-90"
+                      style={{ background: C.panelAlt, color: C.text, border: `1px solid ${C.border}` }}
+                    >
+                      <Plus className="w-3.5 h-3.5" style={{ color: C.accent }} />
+                      Tampilkan 100 baris berikutnya ({filteredKasData.length - kasVisibleCount} tersisa)
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
