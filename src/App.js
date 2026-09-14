@@ -1314,15 +1314,17 @@ export default function App() {
                           <td className="px-4 py-2.5 font-mono" style={{ color: C.green }}>{formatRupiah(item.danaMasuk)}</td>
                           <td className="px-4 py-2.5 font-mono font-semibold" style={{ color: C.red }}>{formatRupiah(item.sisaTagihan)}</td>
                           <td className="px-4 py-2.5">
-                            <span
-                              className="px-2 py-0.5 text-[10px] font-semibold"
-                              style={{
-                                color: item.status.toLowerCase().includes("lunas") ? C.green : C.red,
-                                background: item.status.toLowerCase().includes("lunas") ? "rgba(78,174,114,0.1)" : "rgba(225,84,77,0.1)",
-                              }}
-                            >
-                              {item.status}
-                            </span>
+                           {(() => {
+  const s = getStatusStyle(item.status);
+  return (
+    <span
+      className="px-2 py-0.5 text-[10px] font-semibold border"
+      style={{ color: s.color, background: s.background, borderColor: s.border }}
+    >
+      {item.status}
+    </span>
+  );
+})()}
                           </td>
                         </tr>
                       ))
