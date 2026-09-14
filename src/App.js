@@ -671,7 +671,23 @@ export default function App() {
     setFilterKasRekening("Semua rekening");
     setFilterKasSearch("");
   };
-
+const getStatusStyle = (status) => {
+  const st = (status || "").toLowerCase();
+  if (st.includes("lebih")) {
+    return { color: C.steel, background: "rgba(91,143,176,0.12)", border: "rgba(91,143,176,0.3)" };
+  }
+  if (st.includes("lunas")) {
+    return { color: C.green, background: "rgba(78,174,114,0.12)", border: "rgba(78,174,114,0.3)" };
+  }
+  if (st.includes("kurang")) {
+    return { color: C.amber, background: "rgba(228,162,58,0.12)", border: "rgba(228,162,58,0.3)" };
+  }
+  if (st.includes("belum ada")) {
+    return { color: C.red, background: "rgba(225,84,77,0.12)", border: "rgba(225,84,77,0.3)" };
+  }
+  return { color: C.textDim, background: C.panelAlt, border: C.border };
+};
+  
   const formatRupiah = (val) =>
     new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(val);
 
