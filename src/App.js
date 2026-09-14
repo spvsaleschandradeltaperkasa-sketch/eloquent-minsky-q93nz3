@@ -1331,16 +1331,16 @@ const getStatusStyle = (status) => {
                           <td className="px-4 py-2.5 font-mono font-semibold" style={{ color: C.red }}>{formatRupiah(item.sisaTagihan)}</td>
                           <td className="px-4 py-2.5">
                            {(() => {
-  const s = getStatusStyle(item.status);
-  return (
-    <span
-      className="px-2 py-0.5 text-[10px] font-semibold border"
-      style={{ color: s.color, background: s.background, borderColor: s.border }}
-    >
-      {item.status}
-    </span>
-  );
-})()}
+                 const s = getStatusStyle(item.status);
+                 return (
+                <span
+                className="px-2 py-0.5 text-[10px] font-semibold border"
+                style={{ color: s.color, background: s.background, borderColor: s.border }}
+                >
+               {item.status}
+               </span>
+               );
+                })()}
                           </td>
                         </tr>
                       ))
