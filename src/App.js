@@ -240,6 +240,13 @@ export default function App() {
       return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     };
 
+    // Kolom sheet REKAP INVOICE (indeks 0-based):
+    // 0 Tahun | 1 VIA | 2 Status Kontrak | 3 No Invoice | 4 Tanggal Invoice |
+    // 5 Nama Customer | 6 Class | 7 DPP | 8 PPN | 9 PPH | 10 Nilai Invoice |
+    // 11 Umur Invoice | 12 Status AR | 13 Dana Masuk | 14 Tanggal Kas Masuk |
+    // 15 Sisa Tagihan | 16 Status Invoice | 17 Nilai Potongan | 18 Group |
+    // 19 Tanggal Pemotongan/Clearing | 20 Keterangan Potongan | 21 Month |
+    // 22 Month No | 23 VIA 2 | 24 Tanggal kas masuk | 25 Cash In
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue;
       const cols = parseLine(lines[i]);
@@ -257,6 +264,7 @@ export default function App() {
       const thn = colTahun ? colTahun.replace(".0", "") : defaultYear;
       const salesName = colVia2 || colVia || "-";
       const sisa = cleanNum(cols[15]);
+      const potongan = cleanNum(cols[17]); // Nilai Potongan (PPh/lain-lain)
       const agingDays = sisa > 0 ? calculateAgingDays(colDate, thn, colMonth) : 0;
 
       result.push({
@@ -269,6 +277,8 @@ export default function App() {
         customer: cust || "Unspecified Customer",
         nilaiInvoice: cleanNum(cols[10]),
         danaMasuk: cleanNum(cols[13]),
+        nilaiPotongan: potongan,
+        keteranganPotongan: cleanStr(cols[20]) || "-",
         sisaTagihan: sisa,
         status: cleanStr(cols[16]) || "Belum ada Pembayaran",
         agingDays: agingDays,
@@ -600,23 +610,30 @@ export default function App() {
     return { current, aging31_60, aging60_120, agingCritical120 };
   }, [filteredData]);
 
+  // Tren bulanan: revenue vs (cash in + nilai potongan), supaya bar "tertagih"
+  // sudah termasuk potongan resmi (PPh/lain) dan bisa dibandingkan apple-to-apple
+  // dengan revenue. Kalau semua invoice lunas (termasuk yang kena potongan),
+  // panjang bar gabungan cash-in + potongan akan sejajar dengan bar revenue.
   const monthlyTrendData = useMemo(() => {
     const targetYear = filterTahun === "Semua tahun" ? "2026" : filterTahun;
     const map = {};
-    MONTHS_ORDER.forEach((m) => (map[m] = { revenue: 0, cashIn: 0 }));
+    MONTHS_ORDER.forEach((m) => (map[m] = { revenue: 0, cashIn: 0, potongan: 0 }));
     invoices.forEach((row) => {
       if (row.tahun === targetYear && map[row.bulan]) {
         map[row.bulan].revenue += row.nilaiInvoice;
         map[row.bulan].cashIn += row.danaMasuk;
+        map[row.bulan].potongan += row.nilaiPotongan || 0;
       }
     });
     let maxVal = 1000000;
     const result = MONTHS_ORDER.map((m, idx) => {
       const rev = map[m].revenue;
       const cash = map[m].cashIn;
+      const pot = map[m].potongan;
+      const totalTertagih = cash + pot;
       if (rev > maxVal) maxVal = rev;
-      if (cash > maxVal) maxVal = cash;
-      return { bulan: m, short: MONTHS_SHORT[idx], revenue: rev, cashIn: cash };
+      if (totalTertagih > maxVal) maxVal = totalTertagih;
+      return { bulan: m, short: MONTHS_SHORT[idx], revenue: rev, cashIn: cash, potongan: pot, totalTertagih };
     });
     return { data: result, maxVal };
   }, [invoices, filterTahun]);
@@ -718,8 +735,10 @@ export default function App() {
 
   const totalRevenue = useMemo(() => filteredData.reduce((acc, curr) => acc + curr.nilaiInvoice, 0), [filteredData]);
   const totalCashIn = useMemo(() => filteredData.reduce((acc, curr) => acc + curr.danaMasuk, 0), [filteredData]);
+  const totalPotongan = useMemo(() => filteredData.reduce((acc, curr) => acc + (curr.nilaiPotongan || 0), 0), [filteredData]);
   const totalSisaTagihan = useMemo(() => filteredData.reduce((acc, curr) => acc + curr.sisaTagihan, 0), [filteredData]);
   const collectionRate = totalRevenue > 0 ? ((totalCashIn / totalRevenue) * 100).toFixed(1) : "0.0";
+  const collectionRateWithPotongan = totalRevenue > 0 ? (((totalCashIn + totalPotongan) / totalRevenue) * 100).toFixed(1) : "0.0";
 
   const resetFilters = () => {
     setFilterTahun("2026");
@@ -953,7 +972,7 @@ const getStatusStyle = (status) => {
           </div>
           <div className="flex items-center gap-1.5 text-[10px] font-mono" style={{ color: C.textFaint }}>
             <StatusDot color={loading ? C.amber : C.green} />
-            {loading ? "SYNCING…" : "LIVE · v3.2"}
+            {loading ? "SYNCING…" : "LIVE · v3.3"}
           </div>
         </div>
       </aside>
@@ -1065,7 +1084,12 @@ const getStatusStyle = (status) => {
           <div className="px-5 py-5">
             <div className="text-[10px] font-medium mb-2" style={{ color: C.textFaint }}>Cash In</div>
             <div className="text-xl font-semibold font-mono" style={{ color: C.green }}>{formatRupiah(totalCashIn)}</div>
-            <div className="text-[11px] font-medium mt-1" style={{ color: C.textDim }}>{collectionRate}% collection rate</div>
+            <div className="text-[11px] font-medium mt-1" style={{ color: C.textDim }}>
+              {collectionRate}% collection rate
+              {totalPotongan > 0 && (
+                <span> · +{formatRupiah(totalPotongan)} potongan = {collectionRateWithPotongan}%</span>
+              )}
+            </div>
           </div>
           <div className="px-5 py-5">
             <div className="text-[10px] font-medium mb-2" style={{ color: C.textFaint }}>Sisa Tagihan</div>
@@ -1257,16 +1281,27 @@ const getStatusStyle = (status) => {
           {/* TREND */}
           {activeTab === "trend" && (
             <div className="border" style={{ borderColor: C.border, background: C.panel }}>
-              <div className="flex items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: C.border }}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-5 py-3.5 border-b" style={{ borderColor: C.border }}>
                 <h2 className="text-sm font-semibold">
                   Tren bulanan — {filterTahun === "Semua tahun" ? "2026 (default)" : filterTahun}
                 </h2>
-                <span className="text-xs" style={{ color: C.textFaint }}>Revenue vs cash in</span>
+                <div className="flex items-center gap-4 text-[10px]" style={{ color: C.textFaint }}>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5" style={{ background: C.steel }} /> Revenue
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5" style={{ background: C.green }} /> Cash in
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5" style={{ background: C.amber }} /> Potongan
+                  </span>
+                </div>
               </div>
               <div className="p-5 space-y-3">
                 {monthlyTrendData.data.map((item) => {
                   const revWidth = (item.revenue / monthlyTrendData.maxVal) * 100;
                   const cashWidth = (item.cashIn / monthlyTrendData.maxVal) * 100;
+                  const potWidth = (item.potongan / monthlyTrendData.maxVal) * 100;
                   return (
                     <div key={item.bulan} className="flex items-center gap-4">
                       <div className="w-9 text-[11px] font-mono font-semibold shrink-0" style={{ color: C.textDim }}>{item.short}</div>
@@ -1274,13 +1309,20 @@ const getStatusStyle = (status) => {
                         <div className="w-full h-2" style={{ background: C.panelAlt }}>
                           <div className="h-full" style={{ width: `${Math.min(100, revWidth)}%`, background: C.steel }} />
                         </div>
-                        <div className="w-full h-2" style={{ background: C.panelAlt }}>
+                        {/* bar gabungan: hijau (cash in) + amber (potongan) ditumpuk jadi satu bar */}
+                        <div className="w-full h-2 flex" style={{ background: C.panelAlt }}>
                           <div className="h-full" style={{ width: `${Math.min(100, cashWidth)}%`, background: C.green }} />
+                          <div className="h-full" style={{ width: `${Math.min(Math.max(0, 100 - cashWidth), potWidth)}%`, background: C.amber }} />
                         </div>
                       </div>
-                      <div className="w-44 shrink-0 text-right text-[10px] font-mono leading-tight">
+                      <div className="w-52 shrink-0 text-right text-[10px] font-mono leading-tight">
                         <div style={{ color: C.steel }}>{formatRupiah(item.revenue)}</div>
-                        <div style={{ color: C.green }}>{formatRupiah(item.cashIn)}</div>
+                        <div>
+                          <span style={{ color: C.green }}>{formatRupiah(item.cashIn)}</span>
+                          {item.potongan > 0 && (
+                            <span style={{ color: C.amber }}> + {formatRupiah(item.potongan)}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1366,13 +1408,14 @@ const getStatusStyle = (status) => {
                       <th className="px-4 py-2.5 font-medium">Sales/VIA</th>
                       <th className="px-4 py-2.5 font-medium">Nilai invoice</th>
                       <th className="px-4 py-2.5 font-medium">Dana masuk</th>
+                      <th className="px-4 py-2.5 font-medium">Nilai potongan</th>
                       <th className="px-4 py-2.5 font-medium">Sisa tagihan</th>
                       <th className="px-4 py-2.5 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredData.length === 0 ? (
-                      <tr><td colSpan="8" className="px-4 py-8 text-center" style={{ color: C.textFaint }}>Tidak ada data invoice yang sesuai dengan filter.</td></tr>
+                      <tr><td colSpan="9" className="px-4 py-8 text-center" style={{ color: C.textFaint }}>Tidak ada data invoice yang sesuai dengan filter.</td></tr>
                     ) : (
                       filteredData.map((item) => (
                         <tr key={item.id} className="border-b" style={{ borderColor: C.border }}>
@@ -1382,6 +1425,9 @@ const getStatusStyle = (status) => {
                           <td className="px-4 py-2.5 font-semibold" style={{ color: C.accent }}>{item.via}</td>
                           <td className="px-4 py-2.5 font-mono">{formatRupiah(item.nilaiInvoice)}</td>
                           <td className="px-4 py-2.5 font-mono" style={{ color: C.green }}>{formatRupiah(item.danaMasuk)}</td>
+                          <td className="px-4 py-2.5 font-mono" style={{ color: item.nilaiPotongan > 0 ? C.amber : C.textFaint }}>
+                            {item.nilaiPotongan > 0 ? formatRupiah(item.nilaiPotongan) : "-"}
+                          </td>
                           <td className="px-4 py-2.5 font-mono font-semibold" style={{ color: C.red }}>{formatRupiah(item.sisaTagihan)}</td>
                           <td className="px-4 py-2.5">
                            {(() => {
